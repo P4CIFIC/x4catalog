@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "VITE_HOSTED=1 VITE_BASE=/ npm --prefix frontend run build",
+  "installCommand": "npm --prefix frontend ci",
+  "outputDirectory": "static",
+  "rewrites": [
+    { "source": "/browse", "destination": "/index.html" },
+    { "source": "/docs", "destination": "/index.html" },
+    { "source": "/device", "destination": "/index.html" },
+    { "source": "/device/:path*", "destination": "/index.html" }
+  ]
+}

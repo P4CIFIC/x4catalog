@@ -1,0 +1,38 @@
+# Local development
+.DS_Store
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.playwright-cli/
+.playwright-mcp/
+node_modules/
+
+# Local credentials and deployment state
+.env
+.env.*
+!.env.example
+.vercel/
+
+# Catalog data and generated artifacts
+static/catalog.json
+static/thumbs/
+static/sources/
+*.sqlite
+*.sqlite-*
+models/
+thumbnails/
+views/
+views-previous*/
+exports/
+runs/
+output/
+device-backups/
+digikam-database/
+*.db
+
+# Local notes and screenshots that should not be published
+/*.png
+/*.jpg
+/*.jpeg
+.env*.local

@@ -1,0 +1,36 @@
+name: x4catalog
+region: nyc
+features:
+  - buildpack-stack=ubuntu-22
+static_sites:
+  - name: www
+    github:
+      repo: P4CIFIC/x4catalog
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    environment_slug: node-js
+    build_command: VITE_HOSTED=1 VITE_BASE=/ npm --prefix frontend ci && VITE_HOSTED=1 VITE_BASE=/ npm --prefix frontend run build
+    output_dir: static
+    index_document: index.html
+    catchall_document: index.html
+    envs:
+      - key: VITE_HOSTED
+        value: "1"
+        scope: BUILD_TIME
+      - key: VITE_BASE
+        value: /
+        scope: BUILD_TIME
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /
+      component:
+        name: www
+# Point x4catalog.com here after DNS is live:
+# domains:
+#   - domain: x4catalog.com
+#     type: PRIMARY
+#   - domain: www.x4catalog.com
+#     type: ALIAS

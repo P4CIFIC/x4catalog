@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a change that fits the local catalog or the public gallery
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the scope in mind: a local-first catalog for 480×800 X4 sleep-screen BMPs,
+        plus a hosted public gallery. Cloud ingest and community uploads are tracked
+        separately and are not open for drive-by feature expansion.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations:
+      required: true
