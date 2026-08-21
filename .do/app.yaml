@@ -8,10 +8,10 @@ static_sites:
       repo: P4CIFIC/x4catalog
       branch: main
       deploy_on_push: true
-    source_dir: /
+    source_dir: frontend
     environment_slug: node-js
-    build_command: VITE_HOSTED=1 VITE_BASE=/ npm --prefix frontend ci && VITE_HOSTED=1 VITE_BASE=/ npm --prefix frontend run build
-    output_dir: static
+    build_command: npm ci && VITE_HOSTED=1 VITE_BASE=/ VITE_OUTDIR=dist npm run build && cp -f ../static/styles.css ../static/favicon.svg ../static/catalog-url.json dist/
+    output_dir: dist
     index_document: index.html
     catchall_document: index.html
     envs:
