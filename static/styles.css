@@ -160,10 +160,28 @@ main { padding: clamp(1.25rem, 4vw, 4rem) clamp(1.25rem, 6vw, 7rem) 4rem; }
 .bookshelf-header p { max-width: 36rem; margin: 0; color: var(--faint); font-size: .68rem; line-height: 1.55; }
 .book-header-actions { display: flex; align-items: stretch; gap: .45rem; flex-shrink: 0; }
 .book-primary, .book-secondary { min-height: 2.65rem; border: 1px solid var(--ink); background: transparent; color: var(--ink); padding: .65rem .78rem; font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
-.book-primary { display: flex; align-items: center; gap: 1rem; background: var(--ink); color: var(--paper); }
+.book-primary { position: relative; display: flex; align-items: center; gap: 1rem; overflow: hidden; background: var(--ink); color: var(--paper); cursor: pointer; }
 .book-primary span { color: var(--oxide); font-size: 1.1rem; }
-.book-primary:hover:not(:disabled), .book-secondary:hover:not(:disabled) { background: var(--oxide); color: var(--paper); border-color: var(--oxide); }
-.book-primary:disabled, .book-secondary:disabled { cursor: wait; opacity: .45; }
+.book-file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 0;
+}
+.book-file-input::-webkit-file-upload-button {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.book-primary:hover:not(:disabled):not(.is-disabled), .book-secondary:hover:not(:disabled) { background: var(--oxide); color: var(--paper); border-color: var(--oxide); }
+.book-primary:disabled, .book-primary.is-disabled, .book-secondary:disabled { cursor: wait; opacity: .45; pointer-events: none; }
 .book-note { margin-top: 1.2rem; padding: .75rem .9rem; border-left: .22rem solid var(--oxide); background: color-mix(in oklch, var(--wash) 70%, transparent); color: var(--faint); font-size: .65rem; line-height: 1.5; }
 .book-note strong { color: var(--ink); text-transform: uppercase; letter-spacing: .08em; }
 .book-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 1.3rem; padding: .7rem 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
