@@ -649,6 +649,7 @@ function FilterBar({ query, setQuery, selectedTags, tags, groups, filtersOpen, s
     </div>}
     <div className="control-toolbar">
       <button type="button" className={`filter-toggle ${filtersOpen ? 'open' : ''}`} onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">{selectedTags.length ? `Filter · ${selectedTags.length}` : 'Filter'}<b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button>
+      {hosted && <button type="button" className="racy-toggle" aria-pressed={showSensitive} onClick={onToggleSensitive}>{showSensitive ? 'Racy pictures are on' : 'Show racy pictures'}</button>}
     </div>
     {filtersOpen && <div className="filter-picker" id="filter-drawer">
       <label className="tag-search"><span>FIND A FILTER</span><input type="search" aria-label="Find a filter" placeholder="batman, dark, manga…" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} /></label>
@@ -658,8 +659,6 @@ function FilterBar({ query, setQuery, selectedTags, tags, groups, filtersOpen, s
       <div className="filter-choices">
         {choices.length ? choices.map((item) => <button type="button" key={item.name} className={`filter-choice ${selectedTags.includes(item.name) ? 'active' : ''}`} onClick={() => onToggleTag(item.name)}>{prettyTag(item.name)} <small>{item.automatic_count || 0}</small></button>) : <p className="filter-empty">No filters match that.</p>}
       </div>
-      {hosted && <button type="button" className="content-toggle filter-sensitive" aria-pressed={showSensitive} onClick={onToggleSensitive}>{showSensitive ? 'Hide sensitive' : 'Show sensitive'}</button>}
-      <button type="button" className="filter-done" onClick={() => setFiltersOpen(false)}>Done</button>
     </div>}
   </section>;
 }
