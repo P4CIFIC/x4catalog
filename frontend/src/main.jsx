@@ -26,6 +26,7 @@ const PAGE = PAGE_PATH === '/device' ? 'device'
 const DEVICE_PAGE = PAGE === 'device';
 const LIVE_DEVICE = !PUBLIC_DEMO && (HOSTED || window.location.protocol === 'http:');
 const READ_ONLY_ARCHIVE = PUBLIC_DEMO || HOSTED;
+const SHOW_CLUSTERS = !HOSTED && !PUBLIC_DEMO;
 const HTTPS_PAGE = window.location.protocol === 'https:';
 const supportsTargetAddressSpace = () => {
   try {
@@ -899,7 +900,7 @@ function App() {
     const timer = window.setTimeout(() => loadImages().catch((error) => setNotice(error.message)), 180);
     return () => window.clearTimeout(timer);
   }, [query, tag, cluster, mode, hostedCatalog, showSensitive]);
-  useEffect(() => { if (mode === 'clusters') loadClusters().catch((error) => setNotice(error.message)); }, [mode, hostedCatalog]);
+  useEffect(() => { if (SHOW_CLUSTERS && mode === 'clusters') loadClusters().catch((error) => setNotice(error.message)); }, [mode, hostedCatalog]);
 
   useEffect(() => {
     const updateMarquee = (event) => {
@@ -1425,7 +1426,7 @@ function App() {
           <label className="searchbox"><span>SEARCH</span><input type="search" aria-label="Search pictures" placeholder="Search pictures or tags" value={query} onChange={(event) => { setCluster(null); setQuery(event.target.value); }} /></label>
           <div className="control-toolbar">
             <button type="button" className="filter-toggle" onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">Filters <span>{tag ? prettyTag(tag) : 'All'}</span><b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button>
-            <div className="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" aria-selected={mode === 'images'} className={mode === 'images' ? 'active' : ''} onClick={() => setMode('images')}>Pictures</button><button type="button" role="tab" aria-selected={mode === 'clusters'} className={mode === 'clusters' ? 'active' : ''} onClick={() => setMode('clusters')}>Clusters</button></div>
+            {SHOW_CLUSTERS && <div className="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" aria-selected={mode === 'images'} className={mode === 'images' ? 'active' : ''} onClick={() => setMode('images')}>Pictures</button><button type="button" role="tab" aria-selected={mode === 'clusters'} className={mode === 'clusters' ? 'active' : ''} onClick={() => setMode('clusters')}>Clusters</button></div>}
             {HOSTED && <button type="button" className="content-toggle" aria-pressed={showSensitive} onClick={toggleSensitive}>{showSensitive ? 'Hide sensitive' : 'Show sensitive'}</button>}
           </div>
           {filtersOpen && <div className="filter-drawer" id="filter-drawer"><label className="tag-search"><span>TAG</span><input type="search" aria-label="Find a tag" placeholder="Find a tag" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} /></label><fieldset className="filter-row"><legend>TAG FAMILY</legend>{['','franchise','subject','style','content','intensity','display','model'].map((value) => <button type="button" key={value || 'all-families'} className={`filter ${tagCategory === value ? 'active' : ''}`} onClick={() => { setTagCategory(value); setTag(''); }}>{value || 'All'}</button>)}</fieldset><fieldset className="filter-row tag-filter-row"><legend>TAGS</legend><button type="button" className={`filter ${tag === '' ? 'active' : ''}`} onClick={() => { setCluster(null); setTag(''); setFiltersOpen(false); }}>{'All'}</button>{tags.slice(0, 80).map((item) => <button type="button" key={item.name} title={`${item.category} · ${item.automatic_count} images`} className={`filter ${tag === item.name ? 'active' : ''}`} onClick={() => { setCluster(null); setTag(item.name); setFiltersOpen(false); }}>{prettyTag(item.name)} <small>{item.automatic_count}</small></button>)}</fieldset></div>}
@@ -1437,7 +1438,7 @@ function App() {
         </div>
         <SendDock host={crosspointHost} setHost={setCrosspointHost} destination={crosspointDestination} setDestination={setCrosspointDestination} destinationMode={crosspointDestinationMode} onSelectSleep={selectSleepDestination} onSelectCustom={selectCustomDestination} onDestinationBlur={normalizeDestinationField} selectedCount={selectedIds.size} visibleCount={images.length} visibleSelectedCount={visibleSelectedCount} imageTotal={imageTotal} selectionMode={selectionMode} onToggleSelectionMode={toggleSelectionMode} onClear={clearSelection} onUpload={uploadSelected} onDownload={downloadSelected} onSelectVisible={selectVisible} onSelectAllMatches={selectAllMatches} selectionLoading={selectionLoading} uploading={uploading} progress={uploadProgress} demo={PUBLIC_DEMO} liveDevice={LIVE_DEVICE} filtered={Boolean(query || tag || cluster)} />
         {notice && <section className="notice">{notice}</section>}
-        {mode === 'images' ? <>
+        {!SHOW_CLUSTERS || mode === 'images' ? <>
           <section ref={galleryRef} className={`gallery ${selectionMode ? 'selection-enabled' : ''}`} aria-label="Image results" aria-live="polite" aria-busy={imageLoading} onPointerDown={handleGalleryPointerDown} onKeyDown={handleGalleryKeyDown}>{images.length ? images.map((item) => <ImageCard key={item.id} item={item} onInspect={inspect} selected={selectedIds.has(item.id)} selectionMode={selectionMode} onSelect={selectImage} onKeyDown={handleImageKeyDown} consumeSuppressedClick={consumeSuppressedClick} showSensitive={showSensitive} />) : <div className="empty">{imageLoading ? 'Loading images…' : 'No images match these filters.'}</div>}</section>
           {marquee && <div className="marquee-selection" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
           {images.length < imageTotal && <div className="load-more"><button type="button" onClick={loadMoreImages} disabled={loadingMore || imageLoading}>{loadingMore ? 'Loading…' : `Load more · ${(imageTotal - images.length).toLocaleString()} left`}</button><span>Showing {images.length.toLocaleString()} of {imageTotal.toLocaleString()}</span></div>}
