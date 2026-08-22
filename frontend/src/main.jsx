@@ -317,19 +317,34 @@ const savedCrossPointDestination = () => {
 const CROSSPOINT_WS_CHUNK = 4 * 1024;
 const CROSSPOINT_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 
-const uploadBlobViaHttp = async (host, destination, filename, blob, onProgress) => {
+const postCrossPointUpload = (host, destination, filename, blob, signal) => {
   const form = new FormData();
   form.append('file', blob, filename);
+  const request = new Request(`${crossPointDeviceUrl(host, '/upload')}?${new URLSearchParams({ path: destination }).toString()}`, {
+    method: 'POST',
+    body: form,
+    signal,
+    ...localNetworkFetchOptions(host),
+  });
+  return fetch(request);
+};
+
+const uploadBlobViaHttp = async (host, destination, filename, blob, onProgress) => {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), CROSSPOINT_UPLOAD_TIMEOUT_MS);
   onProgress(0, blob.size);
   try {
-    const response = await fetch(`${crossPointDeviceUrl(host, '/upload')}?${new URLSearchParams({ path: destination }).toString()}`, {
-      method: 'POST',
-      body: form,
-      signal: controller.signal,
-      ...localNetworkFetchOptions(host),
-    });
+    let response = await postCrossPointUpload(host, destination, filename, blob, controller.signal);
+    if (!response.ok) {
+      const text = await response.text();
+      // CrossPoint 1.5 HTTP upload rejects overwrites. Delete and retry.
+      if (response.status === 400 && /already exists/i.test(text)) {
+        await crossPointRequest(host, '/delete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ host, path: joinDevicePath(destination, filename) }) });
+        response = await postCrossPointUpload(host, destination, filename, blob, controller.signal);
+      } else {
+        throw new Error(text || `CrossPoint rejected the upload (${response.status}).`);
+      }
+    }
     await readCrossPointResponse(response);
     onProgress(blob.size, blob.size);
   } catch (error) {
@@ -387,27 +402,16 @@ const uploadBlobViaWebSocket = (host, destination, filename, blob, onProgress) =
 const uploadBlobToCrossPoint = async (host, destination, filename, blob, onProgress) => {
   // Callers pass an already-normalized folder. Do not run this through the
   // sleep-screen helper: that rewrites `/` to `/.sleep`.
-  const httpUpload = () => uploadBlobViaHttp(host, destination, filename, blob, onProgress);
-  const wsUpload = () => uploadBlobViaWebSocket(host, destination, filename, blob, onProgress);
-  if (HTTPS_PAGE) {
-    try {
-      await httpUpload();
-    } catch (httpError) {
-      try {
-        await wsUpload();
-      } catch (_) {
-        throw httpError;
-      }
-    }
-    return;
-  }
+  // Chrome Local Network Access unblocks both ws:// and HTTP to the X4.
+  // Match CrossPoint's own file manager: WebSocket first, HTTP fallback.
   try {
-    await wsUpload();
+    await uploadBlobViaWebSocket(host, destination, filename, blob, onProgress);
   } catch (wsError) {
     try {
-      await httpUpload();
-    } catch (_) {
-      throw wsError;
+      await uploadBlobViaHttp(host, destination, filename, blob, onProgress);
+    } catch (httpError) {
+      const httpIsReachability = /Could not reach|Could not connect|timed out/i.test(String(httpError?.message || ''));
+      throw httpIsReachability ? wsError : httpError;
     }
   }
 };
@@ -587,7 +591,7 @@ function BookLibrary({ books, folders, directory, loading, uploading, uploadProg
       <div className="book-header-actions">
         <button className="device-refresh" onClick={onRefresh} disabled={demo || loading || uploading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
         <button className="book-primary" onClick={() => inputRef.current?.click()} disabled={demo || loading || uploading || !canUpload} title={!demo && !canUpload ? 'Connect the X4 first.' : undefined}>{demo ? 'Preview' : uploading ? 'Updating…' : 'Add books'} <span>↗</span></button>
-        <input ref={inputRef} className="visually-hidden" type="file" accept={`${BOOK_EXTENSIONS.join(',')},application/epub+zip,text/plain`} multiple onChange={handleFileChange} />
+        <input ref={inputRef} className="visually-hidden" type="file" accept=".epub,.xtc,.xtch,.txt,.pdf,application/epub+zip,text/plain,application/pdf" multiple onChange={handleFileChange} />
       </div>
     </div>
     <div className="book-toolbar">
@@ -649,6 +653,11 @@ function DeviceLibrary({ host, setHost, files, books, folders, bookDirectory, st
       <div className="storage-meta"><span>{books.length} book{books.length === 1 ? '' : 's'} · {files.length} sleep screen{files.length === 1 ? '' : 's'}</span><span>{bytesLabel(listedBytes)} listed</span></div>
     </div>
     {error && <div className="device-error">{error} <button onClick={onRefresh}>Try again</button></div>}
+    {(() => {
+      let filesHref = '';
+      try { filesHref = status && !demo ? crossPointDeviceUrl(host, '/files') : ''; } catch (_) { filesHref = ''; }
+      return filesHref ? <p className="device-file-manager"><a href={filesHref} target="_blank" rel="noreferrer">Open the X4 file manager</a> if Add books fails. EPUB · XTC · XTCH · TXT.</p> : null;
+    })()}
     <BookLibrary books={books} folders={folders} directory={bookDirectory} loading={loading} uploading={uploading} uploadProgress={uploadProgress} onRefresh={onRefresh} onNavigate={onNavigateBooks} onUpload={onUploadBooks} onMakeFolder={onMakeFolder} onRename={onRenameBook} onMove={onMoveBook} onDelete={onDeleteBook} canUpload={canUploadBooks} demo={demo} />
     <SleepScreenLibrary files={files} loading={loading} onRefresh={onRefresh} onRename={onRename} onDelete={onDelete} demo={demo} />
   </section>;
@@ -735,7 +744,10 @@ function HomePage({ imageCount }) {
 }
 
 function DeviceHowTo() {
-  return <p className="howto-line">On the X4, open <strong>File Transfer</strong>. Same Wi-Fi. Pictures from <a href={HOSTED ? '/browse' : '/'}>Browse</a>. Books with Add books below. <a href="/docs">Guide</a></p>;
+  return <>
+    <p className="howto-line">On the X4, open <strong>File Transfer</strong>. Same Wi-Fi. Pictures from <a href={HOSTED ? '/browse' : '/'}>Browse</a>. Books with Add books below. <a href="/docs">Guide</a></p>
+    {HTTPS_PAGE && <p className="howto-line howto-secure">Chrome will say <strong>Not Secure</strong>. The site certificate is valid. The X4 itself is HTTP on your Wi-Fi, and Chrome flags that. Keep <strong>Local network</strong> on.</p>}
+  </>;
 }
 
 function DocsPage() {
@@ -765,6 +777,7 @@ function DocsPage() {
       <li>Try the numbers from File Transfer, not the name.</li>
       <li>Use Chrome. Safari and Firefox may block it.</li>
       <li>Click Allow if the browser asks. If you clicked Block, refresh and try again.</li>
+      <li>Chrome may say <strong>Not Secure</strong> after you allow Local network. The x4catalog.com certificate is valid. The X4 speaks HTTP on your Wi-Fi, and Chrome flags that.</li>
     </ul>
     <p>Sleep screens go to the X4 sleep folder. Books go on the <a href="/device">Device</a> page: <strong>Add books</strong>. EPUB, XTC, XTCH, or TXT.</p>
     <h2>CrossPoint help</h2>
@@ -1366,7 +1379,12 @@ function App() {
     }
     const candidates = files.filter((file) => isBookName(file.name));
     const rejected = files.filter((file) => !isBookName(file.name));
-    if (rejected.length) setNotice(`Skipped ${rejected.length} unsupported file${rejected.length === 1 ? '' : 's'}. Choose EPUB, XTC, XTCH, or TXT books.`);
+    if (rejected.length) {
+      const pdf = rejected.some((file) => String(file.name || '').toLowerCase().endsWith('.pdf'));
+      setNotice(pdf
+        ? 'The X4 reads EPUB, XTC, XTCH, or TXT. PDF will not open on this device.'
+        : `Skipped ${rejected.length} unsupported file${rejected.length === 1 ? '' : 's'}. Choose EPUB, XTC, XTCH, or TXT books.`);
+    }
     if (!candidates.length || bookUploading) return;
     setBookUploading(true);
     setBookUploadProgress(null);

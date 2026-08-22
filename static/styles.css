@@ -148,6 +148,8 @@ main { padding: clamp(1.25rem, 4vw, 4rem) clamp(1.25rem, 6vw, 7rem) 4rem; }
 .device-file-actions .danger { border-color: var(--oxide); color: var(--oxide); }
 .device-error { margin-top: 1.2rem; padding: .8rem 1rem; border-left: .25rem solid var(--oxide); background: var(--wash); color: var(--oxide); font-size: .68rem; }
 .device-error button { margin-left: .5rem; border: 0; background: transparent; color: inherit; text-decoration: underline; font-size: inherit; }
+.device-file-manager { margin: .9rem 0 0; color: var(--faint); font-size: .68rem; line-height: 1.5; }
+.device-file-manager a { color: var(--ink); }
 .device-empty { padding: 2rem 0; color: var(--faint); font-size: .7rem; }
 
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
@@ -591,6 +593,7 @@ main { max-width: 96rem; margin: 0 auto; padding: clamp(1.25rem, 4vw, 4rem) clam
 .send-dock .selection-help { display: none; margin: 0; color: var(--faint); font-size: .62rem; }
 .howto-line { max-width: 40rem; margin: 0 0 1.2rem; color: var(--faint); font-size: .95rem; line-height: 1.5; }
 .howto-line a { color: var(--ink); }
+.howto-secure { max-width: 42rem; font-size: .78rem; }
 @media (pointer: fine) {
   .image-card.selection-mode .image-button { cursor: crosshair; }
 }
