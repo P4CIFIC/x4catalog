@@ -44,10 +44,21 @@ Vite leftovers.
 
 ## Pull requests
 
+Fork the repo and open a PR against `main`. Direct pushes to `main` are
+blocked. CI must pass (`test` on Python 3.12 and 3.13, plus `frontend`).
+A maintainer review is required before merge.
+
 - Run `uv run --extra dev pytest`.
 - Rebuild the frontend if you changed `frontend/`.
 - Update the README when a flag, default, or safety behavior changes.
 - Follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+Merging to `main` does **not** ship [x4catalog.com](https://x4catalog.com).
+Production deploys are a separate, maintainer-only step: GitHub Actions
+**Deploy production**, which requires approval on the `production`
+environment. Maintainers can also publish a GitHub Release, which queues
+the same approved job. Do not add App Platform `deploy_on_push` for this
+public repo.
 
 ## License
 

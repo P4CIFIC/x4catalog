@@ -4,10 +4,11 @@ features:
   - buildpack-stack=ubuntu-22
 static_sites:
   - name: www
-    github:
-      repo: P4CIFIC/x4catalog
+    # Clone URL, not GitHub deploy-on-push. Production is shipped by the
+    # "Deploy production" workflow after the production environment is approved.
+    git:
+      repo_clone_url: https://github.com/P4CIFIC/x4catalog.git
       branch: main
-      deploy_on_push: true
     source_dir: frontend
     environment_slug: node-js
     build_command: npm ci && VITE_HOSTED=1 VITE_BASE=/ VITE_OUTDIR=dist npm run build && cp -f ../static/styles.css ../static/favicon.svg ../static/catalog-url.json dist/
