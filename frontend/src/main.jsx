@@ -138,14 +138,14 @@ const localNetworkFetchOptions = (host) => {
 
 const localNetworkError = (host, error) => {
   if (HTTPS_PAGE && !supportsTargetAddressSpace()) {
-    return new Error(`This browser cannot reach CrossPoint from HTTPS. Chrome can ask to use your local network. Open http://127.0.0.1:8765 if this one blocks it.`);
+    return new Error(`This browser cannot talk to the X4 from this website. Try Chrome, or see How to.`);
   }
   const transient = error?.name === 'AbortError' || String(error?.message || '').includes('Failed to fetch');
   if (HTTPS_PAGE && transient) {
-    return new Error(`Could not reach CrossPoint at ${host}. Allow local network access if the browser asks, use the device IP if .local fails, or open http://127.0.0.1:8765.`);
+    return new Error(`Could not reach the X4 at ${host}. Same Wi-Fi? Click Allow if asked. Try the numbers from the X4 screen. See How to.`);
   }
   if (error instanceof Error && error.message && !transient) return error;
-  return new Error(`Could not reach CrossPoint at ${host}.`);
+  return new Error(`Could not reach the X4 at ${host}.`);
 };
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 5000) => {
@@ -412,7 +412,7 @@ function CrossPointTransfer({ host, setHost, destination, setDestination, destin
   useEffect(() => { if (uploading) setExpanded(true); }, [uploading]);
   return <section className={`crosspoint-transfer ${selectedCount ? 'has-selection' : 'empty-selection'}`} aria-label={liveDevice ? 'Send images to CrossPoint' : 'Download selected images'}>
     <div className="transfer-compact">
-      <div className="transfer-step"><span className="step-number">3</span><div><span className="step-label">{liveDevice ? 'Send to X4' : 'Download'}</span><strong>{selectedCount ? `${selectedCount} selected` : 'Select images first'}</strong>{HTTPS_PAGE && liveDevice && <small className="transfer-blocked-note">Allow local network access if asked.</small>}{storageUnavailable && <small className="transfer-blocked-note">Connect the X4 to verify storage</small>}</div>
+      <div className="transfer-step"><span className="step-number">3</span><div><span className="step-label">{liveDevice ? 'Send to X4' : 'Download'}</span><strong>{selectedCount ? `${selectedCount} selected` : 'Select images first'}</strong>{HTTPS_PAGE && liveDevice && <small className="transfer-blocked-note">If asked, allow this site to use a device on your Wi-Fi.</small>}{storageUnavailable && <small className="transfer-blocked-note">Connect the X4 to verify storage</small>}</div>
       </div>
       <div className="transfer-actions">
         <button className="transfer-primary" onClick={liveDevice ? onUpload : onDownload} disabled={demo || uploading || selectedCount === 0 || (liveDevice && (customDestinationMissing || storageUnavailable))} title={storageUnavailable ? 'Connect the X4 and refresh storage before sending.' : undefined}>{sendLabel}<span>↗</span></button>
@@ -587,39 +587,65 @@ function HomePage({ imageCount }) {
   return <article className="product-home">
     <span className="product-kicker">XTEINK X4</span>
     <h1>X4 Catalog</h1>
-    <p className="lede">An open catalog for 480×800 sleep screens. Browse the public gallery here. Run the same software on your computer to organize your own library and send files to an X4 on your local network.</p>
+    <p className="lede">Pictures for the X4 sleep screen. Look around here. Send them to your device over your own Wi-Fi.</p>
     <div className="product-actions">
-      <a className="primary" href="/browse">Browse the gallery</a>
-      <a href="/docs">Run it locally</a>
+      <a className="primary" href="/browse">Browse pictures</a>
+      <a href="/docs">How to send to your X4</a>
       <a href={GITHUB_URL}>Source on GitHub</a>
     </div>
     <div className="product-grid">
-      <article><h2>Local first</h2><p>The catalog binds to 127.0.0.1, never changes source BMPs, and keeps your library on your machine until you publish a snapshot on purpose.</p></article>
-      <article><h2>Public gallery</h2><p>{imageCount ? `${imageCount.toLocaleString()} images` : 'A published snapshot'} prepared for the X4. Sensitive tags stay hidden unless you turn them on.</p></article>
-      <article><h2>Your device</h2><p>Send sleep screens from this site if the browser allows local network access to CrossPoint. Chrome can prompt for that. Otherwise run the local catalog on HTTP.</p></article>
+      <article><h2>Look</h2><p>{imageCount ? `${imageCount.toLocaleString()} images` : 'A public set of pictures'} sized for the X4. Racy tags stay hidden unless you turn them on.</p></article>
+      <article><h2>Send</h2><p>Your X4 and this computer must be on the same Wi-Fi. The pictures go straight to the device. They do not go through our servers.</p></article>
+      <article><h2>Your own library</h2><p>Want your own folder of BMPs, tags, and reviews? Run the same software on your computer. That never changes your original files.</p></article>
     </div>
   </article>;
 }
 
+function DeviceHowTo() {
+  return <section className="howto" aria-labelledby="howto-title">
+    <h2 id="howto-title">Send pictures in 4 steps</h2>
+    <ol>
+      <li>Put your X4 and this computer on the <strong>same Wi-Fi</strong>.</li>
+      <li>Type the address from the X4 screen. It is often <code>crosspoint.local</code>.</li>
+      <li>Click <strong>Refresh</strong>. If the browser asks to use a device on your network, click <strong>Allow</strong>.</li>
+      <li>Open <a href={HOSTED ? '/browse' : '/'}>Browse</a>, pick pictures, then <strong>Send to X4</strong>.</li>
+    </ol>
+    <p>Chrome works best. If it stays offline, type the numbers from the X4 screen instead of the name. <a href="/docs">Full beginner guide</a></p>
+  </section>;
+}
+
 function DocsPage() {
   return <article className="docs-page">
-    <span className="product-kicker">Documentation</span>
-    <h1>Run X4 Catalog</h1>
-    <p className="lede">Python 3.12 or 3.13, uv, and a folder of 480×800 BMP sleep screens.</p>
-    <h2>Install</h2>
+    <span className="product-kicker">Guide</span>
+    <h1>Send pictures to your X4</h1>
+    <p className="lede">You do not need to install anything. The X4 only talks to devices on the same Wi-Fi. Pictures go from this site to the X4. They do not pass through our servers.</p>
+    <h2>What you need</h2>
+    <ul>
+      <li>An XTEINK X4, turned on</li>
+      <li>This computer or phone on the <strong>same Wi-Fi</strong> as the X4</li>
+      <li>Chrome, if you can. Safari often says no.</li>
+    </ul>
+    <h2>Do this</h2>
     <ol>
-      <li>Clone <a href={GITHUB_URL}>P4CIFIC/x4catalog</a>.</li>
-      <li><code>uv sync --extra dev</code></li>
-      <li><code>uv run x4catalog init --source /path/to/bmps</code></li>
-      <li><code>uv run x4catalog ingest --pilot --source /path/to/bmps</code></li>
-      <li><code>uv run x4catalog serve --source /path/to/bmps</code></li>
+      <li>On the X4, open the network / CrossPoint screen. You should see an address such as <code>crosspoint.local</code> or a set of numbers like <code>192.168.1.20</code>.</li>
+      <li>On this computer, open the <a href="/device">Device</a> page.</li>
+      <li>Type that address in <strong>X4 address</strong>. Start with <code>crosspoint.local</code>.</li>
+      <li>Click <strong>Refresh</strong>.</li>
+      <li>If a popup asks to use a device on your local network, click <strong>Allow</strong>.</li>
+      <li>When the page says <strong>Online</strong>, go to <a href={HOSTED ? '/browse' : '/'}>Browse</a>.</li>
+      <li>Click <strong>Select images</strong>, pick some pictures, then <strong>Send to X4</strong>.</li>
     </ol>
-    <p>Open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>. The server is loopback-only.</p>
-    <h2>Talk to an X4</h2>
-    <p>Put the device and your computer on the same LAN. Enter <code>crosspoint.local</code> or the device IP, then send images to <code>/.sleep</code>. On this HTTPS site, Chrome can ask to use your local network. If the browser refuses, run the catalog at <code>http://127.0.0.1:8765</code>.</p>
-    <h2>Public snapshot</h2>
-    <p>Maintainers publish thumbnails and <code>catalog.json</code> to DigitalOcean Spaces and serve this UI from App Platform. Cloud ingest, user uploads, and conversion are not part of the hosted site yet.</p>
-    <p><a href="/device">Device page</a> · <a href={GITHUB_URL}>GitHub</a> · <a href={`${GITHUB_URL}/blob/main/README.md`}>README</a></p>
+    <h2>If it does not connect</h2>
+    <ul>
+      <li>Stay on the same Wi-Fi. Guest Wi-Fi and phone hotspots often block this.</li>
+      <li>Try the numbers from the X4 screen, not the name.</li>
+      <li>Use Chrome. Safari and Firefox may block it.</li>
+      <li>Click Allow if the browser asks. If you clicked Block, refresh and try again.</li>
+    </ul>
+    <p>Sleep screens go to the X4 sleep folder. You can also manage books on the Device page.</p>
+    <h2>Want it to always work?</h2>
+    <p>Run X4 Catalog on your computer and open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>. That path does not need the browser popup. Install steps are in the <a href={`${GITHUB_URL}/blob/main/README.md`}>README</a>.</p>
+    <p>Why the popup exists, firmware notes, and WebSocket limits: <a href={`${GITHUB_URL}/blob/main/docs/device.md`}>docs/device.md</a>.</p>
   </article>;
 }
 
@@ -627,7 +653,7 @@ function SiteFooter() {
   return <footer className="site-footer">
     <span>X4 Catalog · Unlicense</span>
     <nav aria-label="Footer">
-      <a href="/docs">Docs</a>
+      <a href="/docs">How to</a>
       <a href={GITHUB_URL}>GitHub</a>
       <a href={`${GITHUB_URL}/blob/main/PRIVACY.md`}>Privacy</a>
       <a href={`${GITHUB_URL}/blob/main/CONTENT.md`}>Content</a>
@@ -1363,7 +1389,7 @@ function App() {
         {HOSTED && <a className={PAGE === 'home' ? 'active' : ''} href="/">Home</a>}
         <a className={PAGE === 'browse' ? 'active' : ''} href={HOSTED ? '/browse' : '/'}>Browse</a>
         <a className={PAGE === 'device' ? 'active' : ''} href="/device">Device</a>
-        <a className={PAGE === 'docs' ? 'active' : ''} href="/docs">Docs</a>
+        <a className={PAGE === 'docs' ? 'active' : ''} href="/docs">How to</a>
         <a href={GITHUB_URL}>GitHub</a>
       </nav>
       <div className="header-tools">
@@ -1375,12 +1401,12 @@ function App() {
     <main>
       {PUBLIC_DEMO && <section className="demo-banner" role="status"><strong>DEMO</strong><span>Sample data · read-only</span></section>}
       {PAGE === 'home' ? <HomePage imageCount={hostedCatalog?.image_count} /> : PAGE === 'docs' ? <DocsPage /> : DEVICE_PAGE ? <>
-        {HTTPS_PAGE && LIVE_DEVICE && <section className="device-https-note" role="status">CrossPoint is HTTP on your LAN. Allow local network access if the browser asks. If it never asks or still fails, use the device IP or open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>.</section>}
+        {!PUBLIC_DEMO && <DeviceHowTo />}
         <DeviceLibrary host={crosspointHost} setHost={setCrosspointHost} files={deviceFiles} books={deviceBooks} folders={deviceFolders} bookDirectory={bookDirectory} storage={deviceStorage} status={deviceStatus} loading={deviceLoading} uploading={bookUploading} uploadProgress={bookUploadProgress} error={deviceError} onRefresh={refreshDevice} onNavigateBooks={navigateBooks} onUploadBooks={uploadBooks} onMakeFolder={makeBookFolder} onRename={renameDeviceFile} onRenameBook={renameBook} onMoveBook={moveBook} onDelete={deleteDeviceFile} onDeleteBook={deleteBook} demo={PUBLIC_DEMO} />
         {notice && <section className="notice">{notice}</section>}
       </> : <>
         <section className="archive-intro"><div><span className="transfer-kicker"><i /> CATALOG</span><h1>Browse images</h1></div><ol className="workflow" aria-label="How to use the catalog"><li><b>1</b><span>Search</span></li><li><b>2</b><span>Select</span></li><li><b>3</b><span>{LIVE_DEVICE ? 'Send' : 'Download'}</span></li></ol></section>
-        {HTTPS_PAGE && LIVE_DEVICE && <section className="https-note">Sending uses CrossPoint on your LAN. Allow local network access if asked. Download still works if the browser blocks the device.</section>}
+        {HTTPS_PAGE && LIVE_DEVICE && <section className="https-note">Same Wi-Fi as the X4. If the browser asks to use a device on your network, click Allow. <a href="/docs">How to send</a></section>}
         <section className="control-room" aria-label="Catalog controls">
           <label className="searchbox"><span>SEARCH</span><input type="search" aria-label="Search images" placeholder="Search images, tags, or OCR" value={query} onChange={(event) => { setCluster(null); setQuery(event.target.value); }} /></label>
           <div className="control-toolbar"><button type="button" className="filter-toggle" onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">Filters <span>{tag ? prettyTag(tag) : 'All images'}</span><b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button><div className="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" aria-selected={mode === 'images'} className={mode === 'images' ? 'active' : ''} onClick={() => setMode('images')}>Images</button><button type="button" role="tab" aria-selected={mode === 'clusters'} className={mode === 'clusters' ? 'active' : ''} onClick={() => setMode('clusters')}>Clusters</button></div></div>
