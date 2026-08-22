@@ -364,7 +364,7 @@ function ImageThumbnail({ item, large = false, censored = false }) {
   return <img className={censored ? 'sensitive-hidden' : ''} src={item.thumbnail_url || `/api/images/${item.id}/thumbnail`} alt={censored ? 'Hidden sensitive image' : item.filename} loading="lazy" draggable="false" />;
 }
 
-function ImageCard({ item, onInspect, selected, selectionMode, onSelect, onKeyDown, consumeSuppressedClick, showSensitive }) {
+function ImageCard({ item, onInspect, selected, selectionMode, onSelect, onKeyDown, consumeSuppressedClick, showSensitive, visitor }) {
   const censored = itemIsSensitive(item) && !showSensitive;
   const handleClick = (event) => {
     if (consumeSuppressedClick?.()) return;
@@ -375,17 +375,17 @@ function ImageCard({ item, onInspect, selected, selectionMode, onSelect, onKeyDo
     }
     onInspect(item.id);
   };
-  const label = selectionMode ? `${selected ? 'Deselect' : 'Select'} ${item.filename}` : `Inspect ${item.filename}`;
-  return <article className={`image-card ${selected ? 'selected' : ''} ${selectionMode ? 'selection-mode' : ''} ${censored ? 'sensitive' : ''}`} data-image-id={item.id}>
+  const label = selectionMode ? `${selected ? 'Deselect' : 'Select'} picture` : 'Open picture';
+  return <article className={`image-card ${selected ? 'selected' : ''} ${selectionMode ? 'selection-mode' : ''} ${censored ? 'sensitive' : ''} ${visitor ? 'visitor' : ''}`} data-image-id={item.id}>
     <button className="image-button" onClick={handleClick} onKeyDown={(event) => onKeyDown(event, item.id)} aria-label={label} aria-pressed={selectionMode ? selected : undefined}>
       <ImageThumbnail item={item} censored={censored} />
       {selectionMode && <span className={`selection-mark ${selected ? 'active' : ''}`} aria-hidden="true">{selected ? '✓' : ''}</span>}
     </button>
-    <div className="card-meta"><span className="card-index">{String(item.id).padStart(5, '0')}</span><span className="card-filename" title={item.filename}>{item.filename.replace(/_x4\.bmp$/i, '')}</span><span className="decision">{item.decision === 'unreviewed' ? '' : item.decision}</span></div>
+    {!visitor && <div className="card-meta"><span className="card-index">{String(item.id).padStart(5, '0')}</span><span className="card-filename" title={item.filename}>{item.filename.replace(/_x4\.bmp$/i, '')}</span><span className="decision">{item.decision === 'unreviewed' ? '' : item.decision}</span></div>}
   </article>;
 }
 
-function Inspector({ item, onClose, onReview, onQueue, queued, demo, liveDevice, showSensitive }) {
+function Inspector({ item, onClose, onReview, onQueue, onTag, queued, demo, liveDevice, showSensitive, visitor }) {
   const panelRef = useRef(null);
   useEffect(() => {
     if (!item) return undefined;
@@ -403,31 +403,40 @@ function Inspector({ item, onClose, onReview, onQueue, queued, demo, liveDevice,
     };
   }, [item?.id]);
   if (!item) return null;
-  const ocr = item.ocr_processed ? (item.ocr_text || 'No English text detected.') : 'OCR has not been run for this image.';
-  const tags = item.tags || [];
+  const ocrText = String(item.ocr_text || '').trim();
+  const tags = [...new Map((item.tags || []).filter((tag) => tag.name).map((tag) => [tag.name, tag])).values()];
   const meanLuma = Number(item.mean_luma);
   const edgeDensity = Number(item.edge_density);
   const censored = itemIsSensitive(item) && !showSensitive;
   const downloadUrl = hostedSourceUrl(item) || item.thumbnail_url;
+  const ocr = item.ocr_processed ? (ocrText || 'No English text detected.') : 'OCR has not been run for this image.';
   return <>
-    <button className="inspector-backdrop" type="button" onClick={onClose} aria-label="Close image inspector" />
-    <aside ref={panelRef} className="inspector open" role="dialog" aria-modal="true" aria-labelledby="inspector-title" tabIndex="-1">
-    <div className="inspector-topline"><span className="eyebrow">IMAGE {String(item.id).padStart(5, '0')}</span><button className="close" onClick={onClose} aria-label="Close image inspector">×</button></div>
-    <ImageThumbnail item={item} large censored={censored} />
-    <h2 id="inspector-title">{item.filename}</h2>
-    <div className="inspector-actions">
-      {['keep', 'favorite', 'reject'].map((decision) => <button key={decision} className={decision === 'keep' ? 'primary' : ''} onClick={() => onReview(item.id, decision)} disabled={demo}>{decision}</button>)}
-      {liveDevice && <button onClick={() => onQueue(item.id)} disabled={demo}>{queued ? 'Remove from send' : 'Add to send'}</button>}
-      {downloadUrl ? <a className="ghost-link" href={downloadUrl} download={item.filename}>Download</a> : (!liveDevice && <button disabled>No file to download</button>)}
-    </div>
-    <section className="inspector-section"><h3>Tags</h3><div className="tag-list">{tags.length ? tags.map((tag) => <span className={`tag ${tag.source === 'machine' ? 'automatic' : ''}`} key={`${tag.name}-${tag.source}`}>{prettyTag(tag.name)}{tag.source === 'machine' && Number.isFinite(Number(tag.confidence)) ? ` · ${Number(tag.confidence).toFixed(2)}` : ''}</span>) : <span className="tag">No tags</span>}</div></section>
-    <details className="inspector-details"><summary>Image details</summary><div className="facts">
-      <div><span className="fact-label">STATUS</span><br />{item.decision}</div>
-      <div><span className="fact-label">X4 QUALITY</span><br />{item.x4_suitability || 'unscored'}</div>
-      <div><span className="fact-label">LUMA</span><br />{Number.isFinite(meanLuma) ? meanLuma.toFixed(0) : 'not reported'}</div>
-      <div><span className="fact-label">EDGE DENSITY</span><br />{Number.isFinite(edgeDensity) ? `${(edgeDensity * 100).toFixed(0)}%` : 'not reported'}</div>
-    </div><div className="ocr"><span className="fact-label">OCR</span><br />{ocr}</div></details>
-    {item.label_evidence?.length > 0 && <details className="evidence"><summary>Model evidence ({item.label_evidence.length})</summary><div className="evidence-list">{item.label_evidence.slice(0, 40).map((evidence) => <div key={`${evidence.model}-${evidence.raw_label}`}><span>{evidence.normalized_tag || evidence.raw_label}</span><span>{evidence.accepted ? 'accepted' : 'candidate'} · {evidence.model} · {evidence.confidence_band} · {Number(evidence.score).toFixed(2)}</span></div>)}</div></details>}
+    <button className="inspector-backdrop" type="button" onClick={onClose} aria-label="Close picture" />
+    <aside ref={panelRef} className={`inspector open ${visitor ? 'inspector-visitor' : ''}`} role="dialog" aria-modal="true" aria-labelledby="inspector-title" tabIndex="-1">
+      <div className="inspector-topline"><span className="eyebrow" id="inspector-title">{visitor ? 'Picture' : `IMAGE ${String(item.id).padStart(5, '0')}`}</span><button className="close" onClick={onClose} aria-label="Close picture">×</button></div>
+      <ImageThumbnail item={item} large censored={censored} />
+      {visitor ? <>
+        <div className="inspector-actions">
+          {liveDevice && <button className="primary" type="button" onClick={() => onQueue(item.id)}>{queued ? 'Remove from send' : 'Add to send'}</button>}
+        </div>
+        {tags.length > 0 && <section className="inspector-section"><h3>More like this</h3><div className="tag-list">{tags.map((tag) => <button type="button" className="tag" key={tag.name} onClick={() => onTag(tag.name)}>{prettyTag(tag.name)}</button>)}</div></section>}
+        {ocrText ? <section className="inspector-section"><h3>Text in this picture</h3><p className="ocr">{ocrText}</p></section> : null}
+      </> : <>
+        <h2>{item.filename}</h2>
+        <div className="inspector-actions">
+          {['keep', 'favorite', 'reject'].map((decision) => <button key={decision} className={decision === 'keep' ? 'primary' : ''} onClick={() => onReview(item.id, decision)} disabled={demo}>{decision}</button>)}
+          {liveDevice && <button onClick={() => onQueue(item.id)} disabled={demo}>{queued ? 'Remove from send' : 'Add to send'}</button>}
+          {downloadUrl ? <a className="ghost-link" href={downloadUrl} download={item.filename}>Download</a> : (!liveDevice && <button disabled>No file to download</button>)}
+        </div>
+        <section className="inspector-section"><h3>Tags</h3><div className="tag-list">{tags.length ? tags.map((tag) => <span className={`tag ${tag.source === 'machine' ? 'automatic' : ''}`} key={`${tag.name}-${tag.source}`}>{prettyTag(tag.name)}{tag.source === 'machine' && Number.isFinite(Number(tag.confidence)) ? ` · ${Number(tag.confidence).toFixed(2)}` : ''}</span>) : <span className="tag">No tags</span>}</div></section>
+        <details className="inspector-details"><summary>Image details</summary><div className="facts">
+          <div><span className="fact-label">STATUS</span><br />{item.decision}</div>
+          <div><span className="fact-label">X4 QUALITY</span><br />{item.x4_suitability || 'unscored'}</div>
+          <div><span className="fact-label">LUMA</span><br />{Number.isFinite(meanLuma) ? meanLuma.toFixed(0) : 'not reported'}</div>
+          <div><span className="fact-label">EDGE DENSITY</span><br />{Number.isFinite(edgeDensity) ? `${(edgeDensity * 100).toFixed(0)}%` : 'not reported'}</div>
+        </div><div className="ocr"><span className="fact-label">OCR</span><br />{ocr}</div></details>
+        {item.label_evidence?.length > 0 && <details className="evidence"><summary>Model evidence ({item.label_evidence.length})</summary><div className="evidence-list">{item.label_evidence.slice(0, 40).map((evidence) => <div key={`${evidence.model}-${evidence.raw_label}`}><span>{evidence.normalized_tag || evidence.raw_label}</span><span>{evidence.accepted ? 'accepted' : 'candidate'} · {evidence.model} · {evidence.confidence_band} · {Number(evidence.score).toFixed(2)}</span></div>)}</div></details>}
+      </>}
     </aside>
   </>;
 }
@@ -1046,6 +1055,7 @@ function App() {
     if (exit) setSelectionMode(false);
   };
   const queueFromInspector = (id) => {
+    const adding = !selectedIds.has(id);
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -1053,6 +1063,12 @@ function App() {
     });
     setSelectionAnchorId(id);
     setSelectionMode(true);
+    if (HOSTED && adding) setInspected(null);
+  };
+  const filterFromInspector = (name) => {
+    setCluster(null);
+    setTag(name);
+    setInspected(null);
   };
   const selectCluster = async (clusterId) => {
     if (selectionLoading) return;
@@ -1439,14 +1455,14 @@ function App() {
         <SendDock host={crosspointHost} setHost={setCrosspointHost} destination={crosspointDestination} setDestination={setCrosspointDestination} destinationMode={crosspointDestinationMode} onSelectSleep={selectSleepDestination} onSelectCustom={selectCustomDestination} onDestinationBlur={normalizeDestinationField} selectedCount={selectedIds.size} visibleCount={images.length} visibleSelectedCount={visibleSelectedCount} imageTotal={imageTotal} selectionMode={selectionMode} onToggleSelectionMode={toggleSelectionMode} onClear={clearSelection} onUpload={uploadSelected} onDownload={downloadSelected} onSelectVisible={selectVisible} onSelectAllMatches={selectAllMatches} selectionLoading={selectionLoading} uploading={uploading} progress={uploadProgress} demo={PUBLIC_DEMO} liveDevice={LIVE_DEVICE} filtered={Boolean(query || tag || cluster)} />
         {notice && <section className="notice">{notice}</section>}
         {!SHOW_CLUSTERS || mode === 'images' ? <>
-          <section ref={galleryRef} className={`gallery ${selectionMode ? 'selection-enabled' : ''}`} aria-label="Image results" aria-live="polite" aria-busy={imageLoading} onPointerDown={handleGalleryPointerDown} onKeyDown={handleGalleryKeyDown}>{images.length ? images.map((item) => <ImageCard key={item.id} item={item} onInspect={inspect} selected={selectedIds.has(item.id)} selectionMode={selectionMode} onSelect={selectImage} onKeyDown={handleImageKeyDown} consumeSuppressedClick={consumeSuppressedClick} showSensitive={showSensitive} />) : <div className="empty">{imageLoading ? 'Loading images…' : 'No images match these filters.'}</div>}</section>
+          <section ref={galleryRef} className={`gallery ${selectionMode ? 'selection-enabled' : ''}`} aria-label="Image results" aria-live="polite" aria-busy={imageLoading} onPointerDown={handleGalleryPointerDown} onKeyDown={handleGalleryKeyDown}>{images.length ? images.map((item) => <ImageCard key={item.id} item={item} onInspect={inspect} selected={selectedIds.has(item.id)} selectionMode={selectionMode} onSelect={selectImage} onKeyDown={handleImageKeyDown} consumeSuppressedClick={consumeSuppressedClick} showSensitive={showSensitive} visitor={HOSTED || PUBLIC_DEMO} />) : <div className="empty">{imageLoading ? 'Loading images…' : 'No images match these filters.'}</div>}</section>
           {marquee && <div className="marquee-selection" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} aria-hidden="true" />}
           {images.length < imageTotal && <div className="load-more"><button type="button" onClick={loadMoreImages} disabled={loadingMore || imageLoading}>{loadingMore ? 'Loading…' : `Load more · ${(imageTotal - images.length).toLocaleString()} left`}</button><span>Showing {images.length.toLocaleString()} of {imageTotal.toLocaleString()}</span></div>}
         </> : <table className="cluster-list"><thead><tr><th>Cluster</th><th>Images</th><th>Outliers</th><th>Actions</th></tr></thead><tbody>{clusters.map((item) => <tr key={item.id}><td>{String(item.id).padStart(3,'0')}</td><td>{item.image_count}</td><td>{item.outlier_count}</td><td className="cluster-actions"><button type="button" onClick={() => { setCluster(item.id); setMode('images'); }}>Open</button><button type="button" onClick={() => selectCluster(item.id)} disabled={selectionLoading}>Select cluster</button></td></tr>)}</tbody></table>}
       </>}
     </main>
     <SiteFooter />
-    <Inspector item={inspected} onClose={() => setInspected(null)} onReview={review} onQueue={queueFromInspector} queued={inspected ? selectedIds.has(inspected.id) : false} demo={READ_ONLY_ARCHIVE} liveDevice={LIVE_DEVICE} showSensitive={showSensitive} />
+    <Inspector item={inspected} onClose={() => setInspected(null)} onReview={review} onQueue={queueFromInspector} onTag={filterFromInspector} queued={inspected ? selectedIds.has(inspected.id) : false} demo={READ_ONLY_ARCHIVE} liveDevice={LIVE_DEVICE} showSensitive={showSensitive} visitor={HOSTED || PUBLIC_DEMO} />
   </>;
 }
 
