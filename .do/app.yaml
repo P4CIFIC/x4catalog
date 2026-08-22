@@ -28,9 +28,8 @@ ingress:
           prefix: /
       component:
         name: www
-# Point x4catalog.com here after DNS is live:
-# domains:
-#   - domain: x4catalog.com
-#     type: PRIMARY
-#   - domain: www.x4catalog.com
-#     type: ALIAS
+domains:
+  - domain: x4catalog.com
+    type: PRIMARY
+  - domain: www.x4catalog.com
+    type: ALIAS
