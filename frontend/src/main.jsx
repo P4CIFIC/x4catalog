@@ -36,6 +36,8 @@ const supportsTargetAddressSpace = () => {
 };
 const IMAGE_PAGE_SIZE = 160;
 const GITHUB_URL = 'https://github.com/P4CIFIC/x4catalog';
+const GitHubMark = () => <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>;
+const isFinePointer = (event) => event.pointerType === 'mouse' || event.pointerType === 'pen' || !event.pointerType;
 const SENSITIVE_TAGS = new Set(['nsfw', 'nudity', 'partial-nudity', 'explicit-nudity', 'suggestive', 'sexualized', 'fetish', 'violence', 'gore', 'graphic-violence']);
 const itemIsSensitive = (item) => item.sensitive === true || (item.tags || []).some((tag) => SENSITIVE_TAGS.has(String(tag.name || '').toLowerCase()));
 const savedShowSensitive = () => localStorage.getItem('x4-show-sensitive') === '1';
@@ -429,61 +431,51 @@ function Inspector({ item, onClose, onReview, onQueue, queued, demo, liveDevice,
   </>;
 }
 
-function CrossPointTransfer({ host, setHost, destination, setDestination, destinationMode, onSelectSleep, onSelectCustom, onDestinationBlur, selectedCount, visibleCount, selectionMode, onToggleSelectionMode, onClear, onUpload, onDownload, uploading, progress, capacityGuardKnown, demo, liveDevice }) {
+function SendDock({ host, setHost, destination, setDestination, destinationMode, onSelectSleep, onSelectCustom, onDestinationBlur, selectedCount, visibleCount, visibleSelectedCount, imageTotal, selectionMode, onToggleSelectionMode, onClear, onUpload, onDownload, onSelectVisible, onSelectAllMatches, selectionLoading, uploading, progress, demo, liveDevice, filtered }) {
   const [expanded, setExpanded] = useState(false);
   const customDestinationMissing = destinationMode === 'custom' && !destination.trim();
   const sendLabel = !liveDevice
-    ? (selectedCount ? `Download ${selectedCount}` : 'Select images')
-    : demo ? 'Preview' : uploading ? 'Sending…' : customDestinationMissing ? 'Choose a folder' : selectedCount ? `Send ${selectedCount} to X4` : 'Select images';
-  const selectLabel = selectionMode ? 'Done selecting' : selectedCount ? 'Add images' : 'Select images';
+    ? (selectedCount ? `Download ${selectedCount}` : 'Download')
+    : demo ? 'Preview' : uploading ? 'Sending…' : customDestinationMissing ? 'Choose a folder' : selectedCount ? `Send ${selectedCount} to X4` : 'Send to X4';
   useEffect(() => { if (uploading) setExpanded(true); }, [uploading]);
-  return <section className={`crosspoint-transfer ${selectedCount ? 'has-selection' : 'empty-selection'}`} aria-label={liveDevice ? 'Send images to CrossPoint' : 'Download selected images'}>
-    <div className="transfer-compact">
-      <div className="transfer-step"><span className="step-number">3</span><div><span className="step-label">{liveDevice ? 'Send to X4' : 'Download'}</span><strong>{selectedCount ? `${selectedCount} selected` : 'Select images first'}</strong>{HTTPS_PAGE && liveDevice && <small className="transfer-blocked-note">If asked, allow this site to use a device on your Wi-Fi.</small>}</div>
-      </div>
-      <div className="transfer-actions">
-        <button className="transfer-primary" onClick={liveDevice ? onUpload : onDownload} disabled={demo || uploading || selectedCount === 0 || (liveDevice && customDestinationMissing)}>{sendLabel}<span>↗</span></button>
-        <button className={selectionMode ? 'selection-active' : ''} onClick={onToggleSelectionMode} aria-pressed={selectionMode} disabled={uploading || visibleCount === 0}>{selectLabel}</button>
-        <button onClick={onClear} disabled={uploading || selectedCount === 0}>Clear</button>
-      </div>
-      {liveDevice && <button className="transfer-toggle" type="button" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>Options <span>{expanded ? '−' : '+'}</span></button>}
+  if (!selectionMode && selectedCount === 0 && !uploading) return null;
+  const allVisibleSelected = visibleCount > 0 && visibleSelectedCount === visibleCount;
+  const outsideCount = Math.max(selectedCount - visibleSelectedCount, 0);
+  const canSelectAllMatches = filtered && imageTotal > visibleCount;
+  const hint = uploading && progress
+    ? `${progress.index}/${progress.total} · ${Math.round((progress.received / Math.max(progress.totalBytes, 1)) * 100)}%`
+    : selectedCount
+      ? (outsideCount ? `${visibleSelectedCount.toLocaleString()} here · ${outsideCount.toLocaleString()} elsewhere` : 'Ready to send')
+      : 'Tap a picture to add it';
+  return <section className={`send-dock ${selectedCount ? 'has-selection' : ''}`} aria-label={liveDevice ? 'Send pictures to the X4' : 'Download selected pictures'} aria-live="polite">
+    <div className="send-dock-copy">
+      <strong>{selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select pictures'}</strong>
+      <span>{hint}</span>
     </div>
+    <div className="send-dock-actions">
+      <button className="transfer-primary" onClick={liveDevice ? onUpload : onDownload} disabled={demo || uploading || selectedCount === 0 || (liveDevice && customDestinationMissing)}>{sendLabel}</button>
+      <button type="button" className={selectionMode ? 'selection-active' : ''} onClick={onToggleSelectionMode} aria-pressed={selectionMode} disabled={uploading || visibleCount === 0}>{selectionMode ? 'Done' : 'Select'}</button>
+      <button type="button" onClick={onClear} disabled={uploading || selectionLoading || selectedCount === 0}>Clear</button>
+      {selectionMode && <button type="button" onClick={onSelectVisible} disabled={selectionLoading || visibleCount === 0}>{allVisibleSelected ? `Remove visible` : `Add visible`}</button>}
+      {selectionMode && canSelectAllMatches && <button type="button" onClick={onSelectAllMatches} disabled={selectionLoading}>{selectionLoading ? 'Loading…' : `Add all ${imageTotal.toLocaleString()}`}</button>}
+      {liveDevice && <button className="transfer-toggle" type="button" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>Options</button>}
+    </div>
+    {selectionMode && <p className="selection-help">Shift range · ⌘ toggle · drag to select</p>}
+    {HTTPS_PAGE && liveDevice && selectedCount > 0 && <small className="send-dock-hint">If Chrome asks, Allow this site on your Wi-Fi.</small>}
     {expanded && <div className="transfer-details">
       <div className="transfer-settings">
         <label><span>X4 ADDRESS</span><input value={host} onChange={(event) => setHost(event.target.value)} onBlur={() => { const normalized = normalizeCrossPointHost(host); setHost(normalized); localStorage.setItem('x4-crosspoint-host', normalized); }} placeholder={DEFAULT_CROSSPOINT_HOST} disabled={demo || uploading} /></label>
         <div className="destination-picker">
           <span className="setting-label">DESTINATION</span>
           <div className="destination-options">
-            <button type="button" className={`destination-option ${destinationMode === 'sleep' ? 'active' : ''}`} onClick={onSelectSleep} disabled={demo || uploading} aria-pressed={destinationMode === 'sleep'}><span>Sleep screens</span><code>/.sleep</code></button>
-            <button type="button" className={`destination-option ${destinationMode === 'custom' ? 'active' : ''}`} onClick={onSelectCustom} disabled={demo || uploading} aria-pressed={destinationMode === 'custom'}><span>Other folder</span><code>choose</code></button>
+            <button type="button" className={`destination-option ${destinationMode === 'sleep' ? 'active' : ''}`} onClick={onSelectSleep} disabled={demo || uploading} aria-pressed={destinationMode === 'sleep'}><span>Sleep screens</span></button>
+            <button type="button" className={`destination-option ${destinationMode === 'custom' ? 'active' : ''}`} onClick={onSelectCustom} disabled={demo || uploading} aria-pressed={destinationMode === 'custom'}><span>Other folder</span></button>
           </div>
           {destinationMode === 'custom' && <label className="custom-destination"><span>FOLDER PATH</span><input value={destination} onChange={(event) => setDestination(event.target.value)} onBlur={onDestinationBlur} placeholder="/X4" disabled={demo || uploading} /></label>}
         </div>
       </div>
-      <div className="transfer-status" aria-live="polite"><span>{progress ? `${progress.index}/${progress.total} · ${Math.round((progress.received / Math.max(progress.totalBytes, 1)) * 100)}%` : `${destinationMode === 'sleep' ? 'Destination: /.sleep' : `Destination: ${destination || 'choose a folder'}`}${demo ? ' · preview only' : capacityGuardKnown ? '' : ' · storage unknown'}`}</span><a href="/device">Device →</a></div>
+      <div className="transfer-status"><a href="/device">Device</a></div>
     </div>}
-  </section>;
-}
-
-function SelectionTray({ selectionMode, onToggleSelectionMode, selectedCount, visibleCount, visibleSelectedCount, imageTotal, onSelectVisible, onSelectAllMatches, onClear, selectionLoading, demo }) {
-  if (!selectionMode && selectedCount === 0) return null;
-  const allVisibleSelected = visibleCount > 0 && visibleSelectedCount === visibleCount;
-  const outsideCount = Math.max(selectedCount - visibleSelectedCount, 0);
-  const canSelectAllMatches = imageTotal > visibleCount;
-  return <section className={`selection-tray ${selectionMode ? 'is-active' : ''}`} aria-label="Image selection" aria-live="polite">
-    <div className="selection-tray-copy">
-      <strong>{selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Selection mode'}</strong>
-      <span>{selectedCount ? (outsideCount ? `${visibleSelectedCount.toLocaleString()} here · ${outsideCount.toLocaleString()} elsewhere` : 'Ready to send') : 'Click or tap images to add them'}</span>
-    </div>
-    {selectionMode && <small className="selection-help">Click · Shift range · ⌘/Ctrl toggle · drag</small>}
-    <div className="selection-tray-actions">
-      {selectionMode && <>
-        <button type="button" onClick={onSelectVisible} disabled={selectionLoading || visibleCount === 0}>{allVisibleSelected ? `Remove visible ${visibleCount}` : `Add visible ${visibleCount}`}</button>
-        {canSelectAllMatches && <button type="button" onClick={onSelectAllMatches} disabled={selectionLoading}>{selectionLoading ? 'Loading matches…' : `Add all ${imageTotal.toLocaleString()} matches`}</button>}
-      </>}
-      <button type="button" onClick={onClear} disabled={selectionLoading || selectedCount === 0}>Clear</button>
-      {!selectionMode && <button type="button" className="selection-done" onClick={onToggleSelectionMode}>Select more</button>}
-    </div>
   </section>;
 }
 
@@ -629,16 +621,7 @@ function HomePage({ imageCount }) {
 }
 
 function DeviceHowTo() {
-  return <section className="howto" aria-labelledby="howto-title">
-    <h2 id="howto-title">Send pictures in 4 steps</h2>
-    <ol>
-      <li>Put your X4 and this computer on the <strong>same Wi-Fi</strong>.</li>
-      <li>Type the address from the X4 screen. It is often <code>crosspoint.local</code>.</li>
-      <li>Click <strong>Refresh</strong>. If the browser asks to use a device on your network, click <strong>Allow</strong>.</li>
-      <li>Open <a href={HOSTED ? '/browse' : '/'}>Browse</a>, pick pictures, then <strong>Send to X4</strong>.</li>
-    </ol>
-    <p>Chrome works best. If it stays offline, type the numbers from the X4 screen instead of the name. <a href="/docs">Full beginner guide</a></p>
-  </section>;
+  return <p className="howto-line">Same Wi-Fi. Send pictures from <a href={HOSTED ? '/browse' : '/'}>Browse</a>. <a href="/docs">Guide</a></p>;
 }
 
 function DocsPage() {
@@ -660,7 +643,7 @@ function DocsPage() {
       <li>Click <strong>Refresh</strong>.</li>
       <li>If a popup asks to use a device on your local network, click <strong>Allow</strong>.</li>
       <li>When the page says <strong>Online</strong>, go to <a href={HOSTED ? '/browse' : '/'}>Browse</a>.</li>
-      <li>Click <strong>Select images</strong>, pick some pictures, then <strong>Send to X4</strong>.</li>
+      <li>On Browse, tap <strong>Select</strong>, pick pictures, then <strong>Send to X4</strong>.</li>
     </ol>
     <h2>If it does not connect</h2>
     <ul>
@@ -921,7 +904,8 @@ function App() {
   useEffect(() => {
     const updateMarquee = (event) => {
       const start = dragStartRef.current;
-      if (!start) return;
+      if (!start || !isFinePointer(event)) return;
+      if (start.id != null && event.pointerId !== start.id) return;
       const width = Math.abs(event.clientX - start.x);
       const height = Math.abs(event.clientY - start.y);
       if (!marqueeArmedRef.current) {
@@ -935,6 +919,13 @@ function App() {
     const finishMarquee = (event) => {
       const start = dragStartRef.current;
       if (!start) return;
+      if (event.type === 'pointercancel' || (event.pointerType && !isFinePointer(event))) {
+        dragStartRef.current = null;
+        marqueeArmedRef.current = false;
+        setMarquee(null);
+        return;
+      }
+      if (start.id != null && event.pointerId != null && event.pointerId !== start.id) return;
       const left = Math.min(start.x, event.clientX);
       const top = Math.min(start.y, event.clientY);
       const width = Math.abs(event.clientX - start.x);
@@ -1126,8 +1117,8 @@ function App() {
     }
   };
   const handleGalleryPointerDown = (event) => {
-    if (!selectionMode || event.button !== 0) return;
-    dragStartRef.current = { x: event.clientX, y: event.clientY };
+    if (!selectionMode || event.button !== 0 || !isFinePointer(event)) return;
+    dragStartRef.current = { x: event.clientX, y: event.clientY, id: event.pointerId };
     marqueeArmedRef.current = false;
   };
   const handleGalleryKeyDown = (event) => {
@@ -1413,15 +1404,13 @@ function App() {
     <header className="masthead">
       <a className="wordmark" href="/"><span>X4</span><strong>Catalog</strong></a>
       <nav className="site-nav" aria-label="Primary navigation">
-        {HOSTED && <a className={PAGE === 'home' ? 'active' : ''} href="/">Home</a>}
         <a className={PAGE === 'browse' ? 'active' : ''} href={HOSTED ? '/browse' : '/'}>Browse</a>
         <a className={PAGE === 'device' ? 'active' : ''} href="/device">Device</a>
-        <a className={PAGE === 'docs' ? 'active' : ''} href="/docs">How to</a>
-        <a href={GITHUB_URL}>GitHub</a>
+        <a className={PAGE === 'docs' ? 'active' : ''} href="/docs">Docs</a>
       </nav>
+      <a className="nav-github" href={GITHUB_URL} aria-label="GitHub" title="GitHub" rel="noreferrer"><GitHubMark /></a>
       <div className="header-tools">
         {PUBLIC_DEMO && <span className="demo-chip">Demo</span>}
-        {HOSTED && PAGE === 'browse' && <button type="button" className="content-toggle" aria-pressed={showSensitive} onClick={toggleSensitive}>{showSensitive ? 'Hide sensitive' : 'Show sensitive'}</button>}
         {PAGE === 'browse' && !READ_ONLY_ARCHIVE && <button className="quiet-button" onClick={rebuild} disabled={rebuilding} aria-busy={rebuilding}>{rebuilding ? 'Refreshing…' : 'Refresh views'}</button>}
       </div>
     </header>
@@ -1432,16 +1421,21 @@ function App() {
         <DeviceLibrary host={crosspointHost} setHost={setCrosspointHost} files={deviceFiles} books={deviceBooks} folders={deviceFolders} bookDirectory={bookDirectory} storage={deviceStorage} status={deviceStatus} loading={deviceLoading} uploading={bookUploading} uploadProgress={bookUploadProgress} error={deviceError} onRefresh={refreshDevice} onNavigateBooks={navigateBooks} onUploadBooks={uploadBooks} onMakeFolder={makeBookFolder} onRename={renameDeviceFile} onRenameBook={renameBook} onMoveBook={moveBook} onDelete={deleteDeviceFile} onDeleteBook={deleteBook} demo={PUBLIC_DEMO} />
         {notice && <section className="notice">{notice}</section>}
       </> : <>
-        <section className="archive-intro"><div><span className="transfer-kicker"><i /> CATALOG</span><h1>Browse images</h1></div><ol className="workflow" aria-label="How to use the catalog"><li><b>1</b><span>Search</span></li><li><b>2</b><span>Select</span></li><li><b>3</b><span>{LIVE_DEVICE ? 'Send' : 'Download'}</span></li></ol></section>
-        {HTTPS_PAGE && LIVE_DEVICE && <section className="https-note">Same Wi-Fi as the X4. If the browser asks to use a device on your network, click Allow. <a href="/docs">How to send</a></section>}
         <section className="control-room" aria-label="Catalog controls">
-          <label className="searchbox"><span>SEARCH</span><input type="search" aria-label="Search images" placeholder="Search images, tags, or OCR" value={query} onChange={(event) => { setCluster(null); setQuery(event.target.value); }} /></label>
-          <div className="control-toolbar"><button type="button" className="filter-toggle" onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">Filters <span>{tag ? prettyTag(tag) : 'All images'}</span><b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button><div className="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" aria-selected={mode === 'images'} className={mode === 'images' ? 'active' : ''} onClick={() => setMode('images')}>Images</button><button type="button" role="tab" aria-selected={mode === 'clusters'} className={mode === 'clusters' ? 'active' : ''} onClick={() => setMode('clusters')}>Clusters</button></div></div>
+          <label className="searchbox"><span>SEARCH</span><input type="search" aria-label="Search pictures" placeholder="Search pictures or tags" value={query} onChange={(event) => { setCluster(null); setQuery(event.target.value); }} /></label>
+          <div className="control-toolbar">
+            <button type="button" className="filter-toggle" onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">Filters <span>{tag ? prettyTag(tag) : 'All'}</span><b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button>
+            <div className="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" aria-selected={mode === 'images'} className={mode === 'images' ? 'active' : ''} onClick={() => setMode('images')}>Pictures</button><button type="button" role="tab" aria-selected={mode === 'clusters'} className={mode === 'clusters' ? 'active' : ''} onClick={() => setMode('clusters')}>Clusters</button></div>
+            {HOSTED && <button type="button" className="content-toggle" aria-pressed={showSensitive} onClick={toggleSensitive}>{showSensitive ? 'Hide sensitive' : 'Show sensitive'}</button>}
+          </div>
           {filtersOpen && <div className="filter-drawer" id="filter-drawer"><label className="tag-search"><span>TAG</span><input type="search" aria-label="Find a tag" placeholder="Find a tag" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} /></label><fieldset className="filter-row"><legend>TAG FAMILY</legend>{['','franchise','subject','style','content','intensity','display','model'].map((value) => <button type="button" key={value || 'all-families'} className={`filter ${tagCategory === value ? 'active' : ''}`} onClick={() => { setTagCategory(value); setTag(''); }}>{value || 'All'}</button>)}</fieldset><fieldset className="filter-row tag-filter-row"><legend>TAGS</legend><button type="button" className={`filter ${tag === '' ? 'active' : ''}`} onClick={() => { setCluster(null); setTag(''); setFiltersOpen(false); }}>{'All'}</button>{tags.slice(0, 80).map((item) => <button type="button" key={item.name} title={`${item.category} · ${item.automatic_count} images`} className={`filter ${tag === item.name ? 'active' : ''}`} onClick={() => { setCluster(null); setTag(item.name); setFiltersOpen(false); }}>{prettyTag(item.name)} <small>{item.automatic_count}</small></button>)}</fieldset></div>}
         </section>
-        <div className="results-bar" role="status" aria-live="polite"><strong>{mode === 'images' ? imageResultLabel : `${clusters.length.toLocaleString()} clusters`}</strong><span>{resultScopeLabel}</span></div>
-        <CrossPointTransfer host={crosspointHost} setHost={setCrosspointHost} destination={crosspointDestination} setDestination={setCrosspointDestination} destinationMode={crosspointDestinationMode} onSelectSleep={selectSleepDestination} onSelectCustom={selectCustomDestination} onDestinationBlur={normalizeDestinationField} selectedCount={selectedIds.size} visibleCount={images.length} selectionMode={selectionMode} onToggleSelectionMode={toggleSelectionMode} onClear={clearSelection} onUpload={uploadSelected} onDownload={downloadSelected} uploading={uploading} progress={uploadProgress} capacityGuardKnown={Boolean(deviceStatus) && deviceStorage.freeBytes !== null} demo={PUBLIC_DEMO} liveDevice={LIVE_DEVICE} />
-        <SelectionTray selectionMode={selectionMode} onToggleSelectionMode={toggleSelectionMode} selectedCount={selectedIds.size} visibleCount={images.length} visibleSelectedCount={visibleSelectedCount} imageTotal={imageTotal} onSelectVisible={selectVisible} onSelectAllMatches={selectAllMatches} onClear={clearSelection} selectionLoading={selectionLoading} demo={PUBLIC_DEMO} />
+        <div className="results-bar" role="status" aria-live="polite">
+          <strong>{mode === 'images' ? imageResultLabel : `${clusters.length.toLocaleString()} clusters`}</strong>
+          <span>{resultScopeLabel}</span>
+          {mode === 'images' && <button type="button" className={`select-toggle ${selectionMode ? 'selection-active' : ''}`} onClick={toggleSelectionMode} aria-pressed={selectionMode} disabled={uploading || images.length === 0}>{selectionMode ? 'Done' : 'Select'}</button>}
+        </div>
+        <SendDock host={crosspointHost} setHost={setCrosspointHost} destination={crosspointDestination} setDestination={setCrosspointDestination} destinationMode={crosspointDestinationMode} onSelectSleep={selectSleepDestination} onSelectCustom={selectCustomDestination} onDestinationBlur={normalizeDestinationField} selectedCount={selectedIds.size} visibleCount={images.length} visibleSelectedCount={visibleSelectedCount} imageTotal={imageTotal} selectionMode={selectionMode} onToggleSelectionMode={toggleSelectionMode} onClear={clearSelection} onUpload={uploadSelected} onDownload={downloadSelected} onSelectVisible={selectVisible} onSelectAllMatches={selectAllMatches} selectionLoading={selectionLoading} uploading={uploading} progress={uploadProgress} demo={PUBLIC_DEMO} liveDevice={LIVE_DEVICE} filtered={Boolean(query || tag || cluster)} />
         {notice && <section className="notice">{notice}</section>}
         {mode === 'images' ? <>
           <section ref={galleryRef} className={`gallery ${selectionMode ? 'selection-enabled' : ''}`} aria-label="Image results" aria-live="polite" aria-busy={imageLoading} onPointerDown={handleGalleryPointerDown} onKeyDown={handleGalleryKeyDown}>{images.length ? images.map((item) => <ImageCard key={item.id} item={item} onInspect={inspect} selected={selectedIds.has(item.id)} selectionMode={selectionMode} onSelect={selectImage} onKeyDown={handleImageKeyDown} consumeSuppressedClick={consumeSuppressedClick} showSensitive={showSensitive} />) : <div className="empty">{imageLoading ? 'Loading images…' : 'No images match these filters.'}</div>}</section>
