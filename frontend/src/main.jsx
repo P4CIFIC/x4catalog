@@ -577,7 +577,6 @@ function BookCard({ book, onRename, onMove, onDelete, demo }) {
 }
 
 function BookLibrary({ books, folders, directory, loading, uploading, uploadProgress, onRefresh, onNavigate, onUpload, onMakeFolder, onRename, onMove, onDelete, canUpload, demo }) {
-  const inputRef = useRef(null);
   const segments = directory === '/' ? [] : directory.split('/').filter(Boolean);
   const crumbs = segments.map((segment, index) => ({ name: segment, path: `/${segments.slice(0, index + 1).join('/')}` }));
   const handleFileChange = (event) => {
@@ -585,13 +584,16 @@ function BookLibrary({ books, folders, directory, loading, uploading, uploadProg
     event.target.value = '';
     if (files.length) onUpload(files);
   };
+  const uploadDisabled = demo || uploading || !canUpload;
   return <section className="bookshelf" id="books" aria-label="Books on the X4">
     <div className="bookshelf-header">
       <div><span className="transfer-kicker"><i /> BOOKS</span><h2>Books</h2><span className="book-format-note">EPUB · XTC · XTCH · TXT</span></div>
       <div className="book-header-actions">
         <button className="device-refresh" onClick={onRefresh} disabled={demo || loading || uploading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
-        <button className="book-primary" onClick={() => inputRef.current?.click()} disabled={demo || loading || uploading || !canUpload} title={!demo && !canUpload ? 'Connect the X4 first.' : undefined}>{demo ? 'Preview' : uploading ? 'Updating…' : 'Add books'} <span>↗</span></button>
-        <input ref={inputRef} className="visually-hidden" type="file" accept=".epub,.xtc,.xtch,.txt,.pdf,application/epub+zip,text/plain,application/pdf" multiple onChange={handleFileChange} />
+        <label className={`book-primary ${uploadDisabled ? 'is-disabled' : ''}`} title={!demo && !canUpload ? 'Connect the X4 first.' : undefined}>
+          {demo ? 'Preview' : uploading ? 'Updating…' : 'Add books'} <span>↗</span>
+          <input className="book-file-input" type="file" accept=".epub,.xtc,.xtch,.txt,application/epub+zip,text/plain" multiple disabled={uploadDisabled} onChange={handleFileChange} />
+        </label>
       </div>
     </div>
     <div className="book-toolbar">
@@ -937,7 +939,6 @@ function App() {
   const loadDevice = async () => {
     setDeviceLoading(true);
     setDeviceError('');
-    setDeviceStatus(null);
     try {
       if (PUBLIC_DEMO) {
         const files = DEMO_SLEEP_FILES;
