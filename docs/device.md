@@ -12,7 +12,8 @@ device. They do not go through x4catalog.com.
 x4catalog.com is HTTPS. CrossPoint is HTTP:
 
 - REST: `http://crosspoint.local` (or the device IPv4)
-- Uploads: `ws://crosspoint.local:81/` (or `ws://<ip>:81/`)
+- HTTP uploads: `POST /upload?path=/folder` (multipart `file`)
+- WebSocket uploads: `ws://crosspoint.local:81/` (or `ws://<ip>:81/`)
 
 A public HTTPS page loading those URLs is mixed content. Browsers block
 it unless they implement [Local Network Access](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/local_network_access)
@@ -27,9 +28,12 @@ prompt: allow this site to use a device on your network.
 There is **no FastAPI proxy** on the hosted site. CrossPoint 1.5 CORS is
 required for the browser to talk to the device directly.
 
-Uploads still use the CrossPoint WebSocket. Granting LNA for `fetch` does
-not always unblock `ws://`. If status works and send fails, use the local
-catalog.
+On HTTPS, uploads use CrossPoint's HTTP `POST /upload` first (same
+`targetAddressSpace` as status). That is the path that survives mixed
+content after the user clicks Allow. WebSocket `ws://…:81` is the fast
+path on the local HTTP catalog, with HTTP as fallback. CrossPoint's own
+file manager does the same. Use 4 KB WebSocket frames; a 1 MB send buffer
+overruns the ESP32 on books.
 
 CrossPoint **1.5.0** `/api/status` returns version, IP, RSSI, `freeHeap`
 (RAM), uptime, device, and serial. It does **not** report SD free space.
@@ -63,7 +67,8 @@ loopback `/api/crosspoint/…` → device.
 | Default hostname | `crosspoint.local` (mDNS; often flaky) |
 | Sleep screens | `/.sleep` |
 | Books | Visible folders only (EPUB, XTC, XTCH, TXT) |
-| WebSocket | port `81`, `START:filename:size:destination` then binary frames |
+| HTTP upload | `POST /upload?path=/folder`, multipart field `file` |
+| WebSocket | port `81`, 4 KB frames, `START:filename:size:destination` |
 
 Prefer the IPv4 from the CrossPoint screen if `.local` does not resolve.
 
