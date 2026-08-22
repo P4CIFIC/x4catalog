@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
+
 from x4catalog.catalog import ingest
-from x4catalog.publish import build_snapshot
+from x4catalog.publish import build_snapshot, publish
 
 from test_catalog import configured
 
@@ -53,3 +55,14 @@ def test_public_image_uses_cdn_base_and_marks_sensitive() -> None:
     assert published["sensitive"] is True
     assert published["thumbnail_url"] == "https://cdn.example.com/thumbs/abc123.webp"
     assert published["source_url"] == "https://cdn.example.com/sources/abc123.bmp"
+
+
+def test_publish_cache_busts_cdn_catalog_url(tmp_path) -> None:
+    paths = configured(tmp_path)
+    ingest(paths, limit=3)
+    result = publish(paths, public_base="https://cdn.example.com")
+    assert result["catalog_url"].startswith("https://cdn.example.com/catalog.json?v=")
+    pointer = json.loads((paths.static / "catalog-url.json").read_text())
+    assert pointer["url"] == result["catalog_url"]
+    local = publish(paths)
+    assert local["catalog_url"] == "/catalog.json"

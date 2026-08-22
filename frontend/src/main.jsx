@@ -214,6 +214,30 @@ const numericField = (object, keys) => {
   return null;
 };
 
+const hostedCdnOrigin = (item) => {
+  const hint = String(item?.thumbnail_url || item?.source_url || '');
+  for (const marker of ['/thumbs/', '/sources/']) {
+    const index = hint.indexOf(marker);
+    if (index > 0) return hint.slice(0, index);
+  }
+  return '';
+};
+
+const hostedSourceUrl = (item) => {
+  if (item?.source_url) return item.source_url;
+  const digest = String(item?.sha256 || '');
+  const origin = hostedCdnOrigin(item);
+  if (digest && origin) return `${origin}/sources/${digest}.bmp`;
+  return '';
+};
+
+const sourceUrlForSend = (detail, id) => hostedSourceUrl(detail) || (!HOSTED ? `/api/images/${id}/source` : '');
+
+const blobIsBmp = async (blob) => {
+  const header = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  return header.length === 2 && header[0] === 0x42 && header[1] === 0x4d;
+};
+
 const parseDeviceStorage = (status, storagePayload, listedBytes) => {
   const source = storagePayload?.storage || storagePayload || status?.storage || status?.sd || status || {};
   // CrossPoint 1.5 /api/status reports freeHeap (RAM), not SD card capacity.
@@ -381,7 +405,7 @@ function Inspector({ item, onClose, onReview, onQueue, queued, demo, liveDevice,
   const meanLuma = Number(item.mean_luma);
   const edgeDensity = Number(item.edge_density);
   const censored = itemIsSensitive(item) && !showSensitive;
-  const downloadUrl = item.source_url || item.thumbnail_url;
+  const downloadUrl = hostedSourceUrl(item) || item.thumbnail_url;
   return <>
     <button className="inspector-backdrop" type="button" onClick={onClose} aria-label="Close image inspector" />
     <aside ref={panelRef} className="inspector open" role="dialog" aria-modal="true" aria-labelledby="inspector-title" tabIndex="-1">
@@ -688,7 +712,6 @@ function App() {
   const [selectionAnchorId, setSelectionAnchorId] = useState(null);
   const [selectionLoading, setSelectionLoading] = useState(false);
   const [marquee, setMarquee] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
   const [crosspointHost, setCrosspointHost] = useState(savedCrossPointHost);
   const [crosspointDestination, setCrosspointDestination] = useState(savedCrossPointDestination);
   const [crosspointDestinationMode, setCrosspointDestinationMode] = useState(() => savedCrossPointDestination() === DEFAULT_CROSSPOINT_DESTINATION ? 'sleep' : 'custom');
@@ -708,6 +731,7 @@ function App() {
   const imageRequestRef = useRef(0);
   const galleryRef = useRef(null);
   const dragStartRef = useRef(null);
+  const marqueeArmedRef = useRef(false);
   const suppressClickRef = useRef(false);
 
   const loadImages = async ({ append = false } = {}) => {
@@ -849,7 +873,10 @@ function App() {
         if (!response.ok) throw new Error('Catalog has not been published yet. Run x4catalog publish locally.');
         return response.json();
       })
-      .then((meta) => fetch(meta.url || '/catalog.json'))
+      .then((meta) => {
+        const catalogUrl = meta.url || '/catalog.json';
+        return fetch(catalogUrl.includes('?') ? catalogUrl : `${catalogUrl}?v=${encodeURIComponent(meta.updated || '1')}`);
+      })
       .then((response) => {
         if (!response.ok) throw new Error('Could not load the published catalog snapshot.');
         return response.json();
@@ -895,9 +922,15 @@ function App() {
     const updateMarquee = (event) => {
       const start = dragStartRef.current;
       if (!start) return;
-      const left = Math.min(start.x, event.clientX);
-      const top = Math.min(start.y, event.clientY);
-      setMarquee({ left, top, width: Math.abs(event.clientX - start.x), height: Math.abs(event.clientY - start.y) });
+      const width = Math.abs(event.clientX - start.x);
+      const height = Math.abs(event.clientY - start.y);
+      if (!marqueeArmedRef.current) {
+        if (width <= 6 && height <= 6) return;
+        marqueeArmedRef.current = true;
+        suppressClickRef.current = true;
+      }
+      event.preventDefault();
+      setMarquee({ left: Math.min(start.x, event.clientX), top: Math.min(start.y, event.clientY), width, height });
     };
     const finishMarquee = (event) => {
       const start = dragStartRef.current;
@@ -906,7 +939,7 @@ function App() {
       const top = Math.min(start.y, event.clientY);
       const width = Math.abs(event.clientX - start.x);
       const height = Math.abs(event.clientY - start.y);
-      if (width > 6 || height > 6) {
+      if (marqueeArmedRef.current && (width > 6 || height > 6)) {
         const selectedInMarquee = [...(galleryRef.current?.querySelectorAll('.image-card') || [])]
           .filter((card) => {
             const rect = card.getBoundingClientRect();
@@ -918,14 +951,13 @@ function App() {
           setSelectedIds((current) => new Set([...current, ...selectedInMarquee]));
           setSelectionAnchorId(selectedInMarquee[selectedInMarquee.length - 1]);
           setSelectionMode(true);
-          suppressClickRef.current = true;
         }
       }
       dragStartRef.current = null;
+      marqueeArmedRef.current = false;
       setMarquee(null);
-      setDragActive(false);
     };
-    window.addEventListener('pointermove', updateMarquee);
+    window.addEventListener('pointermove', updateMarquee, { passive: false });
     window.addEventListener('pointerup', finishMarquee, true);
     window.addEventListener('mouseup', finishMarquee, true);
     window.addEventListener('pointercancel', finishMarquee, true);
@@ -1095,11 +1127,8 @@ function App() {
   };
   const handleGalleryPointerDown = (event) => {
     if (!selectionMode || event.button !== 0) return;
-    event.preventDefault();
-    try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch (_) { /* pointer capture is best-effort */ }
     dragStartRef.current = { x: event.clientX, y: event.clientY };
-    setMarquee({ left: event.clientX, top: event.clientY, width: 0, height: 0 });
-    setDragActive(true);
+    marqueeArmedRef.current = false;
   };
   const handleGalleryKeyDown = (event) => {
     const target = event.target;
@@ -1257,7 +1286,7 @@ function App() {
     if (!ids.length) return;
     const catalogImages = hostedCatalog?.images || images;
     const details = ids.map((id) => catalogImages.find((item) => item.id === id)).filter(Boolean);
-    const downloadable = details.filter((item) => item.source_url || item.thumbnail_url);
+    const downloadable = details.map((item) => ({ ...item, href: hostedSourceUrl(item) || item.thumbnail_url })).filter((item) => item.href);
     if (!downloadable.length) {
       setNotice('Original BMPs are not in this snapshot. Run the local catalog to send them to an X4.');
       return;
@@ -1265,7 +1294,7 @@ function App() {
     if (downloadable.length > 8 && !window.confirm(`Download ${downloadable.length} files one by one?`)) return;
     for (const item of downloadable) {
       const link = document.createElement('a');
-      link.href = item.source_url || item.thumbnail_url;
+      link.href = item.href;
       link.download = item.filename || 'x4-image';
       link.rel = 'noreferrer';
       document.body.appendChild(link);
@@ -1316,9 +1345,12 @@ function App() {
       for (let index = 0; index < ids.length; index += 1) {
         const id = ids[index];
         const detail = details[index];
-        const source = await fetch(detail.source_url || `/api/images/${id}/source`);
+        const sourceUrl = sourceUrlForSend(detail, id);
+        if (!sourceUrl) throw new Error(`Original BMP for ${detail.filename} is missing from this snapshot.`);
+        const source = await fetch(sourceUrl);
         if (!source.ok) throw new Error((await source.text()) || `Could not read ${detail.filename}.`);
         const blob = await source.blob();
+        if (!(await blobIsBmp(blob))) throw new Error(`${detail.filename} did not load as a BMP. Refresh the page and try again.`);
         await uploadBlobToCrossPoint(crosspointHost, destination, detail.filename, blob, (received, totalBytes) => setUploadProgress({ index: index + 1, total: ids.length, filename: detail.filename, received, totalBytes }));
       }
       setNotice(`Sent ${ids.length} image${ids.length === 1 ? '' : 's'} to CrossPoint.`);
