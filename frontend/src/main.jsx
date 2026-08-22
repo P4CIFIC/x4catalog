@@ -601,16 +601,68 @@ function DeviceLibrary({ host, setHost, files, books, folders, bookDirectory, st
   </section>;
 }
 
-const hostedMatches = (catalog, { query = '', tag = '', cluster = null, showSensitive = false } = {}) => {
+const VISITOR_TAG_GROUPS = Object.freeze([
+  { id: 'subject', label: 'Subject', categories: ['subject'] },
+  { id: 'franchise', label: 'Shows & games', categories: ['franchise'] },
+  { id: 'style', label: 'Style', categories: ['style'] },
+  { id: 'display', label: 'Look on the X4', categories: ['display'] },
+  { id: 'intensity', label: 'Mood', categories: ['intensity'] },
+]);
+const CURATOR_TAG_GROUPS = Object.freeze([
+  ...VISITOR_TAG_GROUPS,
+  { id: 'composition', label: 'Composition', categories: ['composition'] },
+  { id: 'content', label: 'Content', categories: ['content'] },
+  { id: 'x4', label: 'X4 scores', categories: ['x4'] },
+  { id: 'status', label: 'Status', categories: ['status'] },
+  { id: 'model', label: 'Model', categories: ['model'] },
+]);
+
+const hostedMatches = (catalog, { query = '', tags = [], cluster = null, showSensitive = false } = {}) => {
   const search = query.toLowerCase();
+  const required = tags.filter(Boolean);
   return (catalog?.images || []).filter((item) => {
     if (!showSensitive && itemIsSensitive(item)) return false;
-    const searchable = [item.filename, item.ocr_text, ...(item.tags || []).map((itemTag) => itemTag.name)].join(' ').toLowerCase();
-    const tagHit = !tag || (item.tags || []).some((itemTag) => itemTag.name === tag);
+    const names = new Set((item.tags || []).map((itemTag) => itemTag.name));
+    const searchable = [item.filename, item.ocr_text, ...names].join(' ').toLowerCase();
+    const tagHit = required.every((name) => names.has(name));
     const clusterHit = cluster == null || (item.cluster_ids || []).includes(Number(cluster));
     return (!search || searchable.includes(search)) && tagHit && clusterHit;
   });
 };
+
+function FilterBar({ query, setQuery, selectedTags, tags, groups, filtersOpen, setFiltersOpen, onToggleTag, onClearTags, onClearSearch, tagSearch, setTagSearch, tagGroup, setTagGroup, showSensitive, onToggleSensitive, hosted, cluster, onClearCluster }) {
+  const available = tags.filter((item) => showSensitive || !SENSITIVE_TAGS.has(item.name));
+  const populatedGroups = groups.filter((group) => available.some((item) => group.categories.includes(item.category)));
+  const activeGroup = populatedGroups.find((group) => group.id === tagGroup) || populatedGroups[0];
+  const needle = tagSearch.trim().toLowerCase();
+  const choices = (needle
+    ? available.filter((item) => item.name.includes(needle) || prettyTag(item.name).toLowerCase().includes(needle))
+    : available.filter((item) => activeGroup && activeGroup.categories.includes(item.category))
+  ).slice().sort((a, b) => (b.automatic_count || 0) - (a.automatic_count || 0)).slice(0, 60);
+  const hasActive = selectedTags.length > 0 || Boolean(query) || cluster != null;
+  return <section className="control-room" aria-label="Find pictures">
+    <label className="searchbox"><span>SEARCH</span><input type="search" aria-label="Search pictures" placeholder="Search pictures" value={query} onChange={(event) => { onClearCluster?.(); setQuery(event.target.value); }} /></label>
+    {hasActive && <div className="filter-chips" aria-label="Active filters">
+      {query && <button type="button" className="filter-chip" onClick={onClearSearch}><span>Search · {query}</span><b aria-hidden="true">×</b></button>}
+      {selectedTags.map((name, index) => <span className="filter-chip-wrap" key={name}>{index > 0 && <i className="filter-and">and</i>}<button type="button" className="filter-chip" onClick={() => onToggleTag(name)}><span>{prettyTag(name)}</span><b aria-hidden="true">×</b></button></span>)}
+      {selectedTags.length > 1 && <button type="button" className="filter-clear" onClick={onClearTags}>Clear filters</button>}
+    </div>}
+    <div className="control-toolbar">
+      <button type="button" className={`filter-toggle ${filtersOpen ? 'open' : ''}`} onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">{selectedTags.length ? `Filter · ${selectedTags.length}` : 'Filter'}<b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button>
+    </div>
+    {filtersOpen && <div className="filter-picker" id="filter-drawer">
+      <label className="tag-search"><span>FIND A FILTER</span><input type="search" aria-label="Find a filter" placeholder="batman, dark, manga…" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} /></label>
+      {!needle && populatedGroups.length > 0 && <div className="filter-groups" role="tablist" aria-label="Filter groups">
+        {populatedGroups.map((group) => <button type="button" role="tab" key={group.id} className={activeGroup?.id === group.id ? 'active' : ''} aria-selected={activeGroup?.id === group.id} onClick={() => setTagGroup(group.id)}>{group.label}</button>)}
+      </div>}
+      <div className="filter-choices">
+        {choices.length ? choices.map((item) => <button type="button" key={item.name} className={`filter-choice ${selectedTags.includes(item.name) ? 'active' : ''}`} onClick={() => onToggleTag(item.name)}>{prettyTag(item.name)} <small>{item.automatic_count || 0}</small></button>) : <p className="filter-empty">No filters match that.</p>}
+      </div>
+      {hosted && <button type="button" className="content-toggle filter-sensitive" aria-pressed={showSensitive} onClick={onToggleSensitive}>{showSensitive ? 'Hide sensitive' : 'Show sensitive'}</button>}
+      <button type="button" className="filter-done" onClick={() => setFiltersOpen(false)}>Done</button>
+    </div>}
+  </section>;
+}
 
 function HomePage({ imageCount }) {
   return <article className="product-home">
@@ -690,9 +742,9 @@ function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [inspected, setInspected] = useState(null);
   const [query, setQuery] = useState('');
-  const [tag, setTag] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
   const [tagSearch, setTagSearch] = useState('');
-  const [tagCategory, setTagCategory] = useState('');
+  const [tagGroup, setTagGroup] = useState('subject');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [tags, setTags] = useState([]);
   const [cluster, setCluster] = useState(null);
@@ -735,9 +787,9 @@ function App() {
       const result = PUBLIC_DEMO
         ? DEMO_IMAGES.filter((item) => {
             const searchable = [item.filename, item.ocr_text, ...item.tags.map((itemTag) => itemTag.name)].join(' ').toLowerCase();
-            return (!query.toLowerCase() || searchable.includes(query.toLowerCase())) && (!tag || item.tags.some((itemTag) => itemTag.name === tag));
+            return (!query.toLowerCase() || searchable.includes(query.toLowerCase())) && selectedTags.every((name) => item.tags.some((itemTag) => itemTag.name === name));
           })
-        : hostedMatches(hostedCatalog, { query, tag, cluster, showSensitive });
+        : hostedMatches(hostedCatalog, { query, tags: selectedTags, cluster, showSensitive });
       const sliced = result.slice(offset, offset + IMAGE_PAGE_SIZE);
       if (requestId === imageRequestRef.current) {
         setImages((current) => append ? [...current, ...sliced] : sliced);
@@ -750,7 +802,8 @@ function App() {
     }
     const params = new URLSearchParams({ limit: String(IMAGE_PAGE_SIZE), offset: String(offset) });
     if (query) params.set('q', query);
-    if (tag) params.set('tag', tag);
+    if (selectedTags.length === 1) params.set('tag', selectedTags[0]);
+    if (selectedTags.length > 1) params.set('tags', selectedTags.join(','));
     if (cluster) params.set('cluster_id', cluster);
     try {
       const result = await get(`/api/images?${params}`);
@@ -784,14 +837,10 @@ function App() {
   const loadTags = async () => {
     if (PUBLIC_DEMO || HOSTED) {
       const source = PUBLIC_DEMO ? DEMO_TAGS : (hostedCatalog?.tags || []);
-      const result = source.filter((item) => (!tagSearch || item.name.includes(tagSearch.toLowerCase())) && (!tagCategory || item.category === tagCategory) && (showSensitive || !SENSITIVE_TAGS.has(item.name)));
-      setTags(result);
-      return result;
+      setTags(source.filter((item) => showSensitive || !SENSITIVE_TAGS.has(item.name)));
+      return source;
     }
-    const params = new URLSearchParams({ limit: '120' });
-    if (tagSearch) params.set('q', tagSearch);
-    if (tagCategory) params.set('category', tagCategory);
-    setTags((await get(`/api/tags?${params}`)).items);
+    setTags((await get('/api/tags?limit=500')).items);
   };
   const loadBookDirectory = async (directory = bookDirectory) => {
     const normalized = normalizeBookDirectory(directory);
@@ -902,13 +951,13 @@ function App() {
     if (HOSTED && !hostedCatalog) return undefined;
     const timer = window.setTimeout(() => loadTags().catch((error) => setNotice(error.message)), 160);
     return () => window.clearTimeout(timer);
-  }, [tagSearch, tagCategory, hostedCatalog, showSensitive]);
+  }, [hostedCatalog, showSensitive]);
   useEffect(() => {
     if (DEVICE_PAGE || PAGE === 'home' || PAGE === 'docs' || mode !== 'images') return undefined;
     if (HOSTED && !hostedCatalog) return undefined;
     const timer = window.setTimeout(() => loadImages().catch((error) => setNotice(error.message)), 180);
     return () => window.clearTimeout(timer);
-  }, [query, tag, cluster, mode, hostedCatalog, showSensitive]);
+  }, [query, selectedTags, cluster, mode, hostedCatalog, showSensitive]);
   useEffect(() => { if (SHOW_CLUSTERS && mode === 'clusters') loadClusters().catch((error) => setNotice(error.message)); }, [mode, hostedCatalog]);
 
   useEffect(() => {
@@ -1030,11 +1079,12 @@ function App() {
       if (PUBLIC_DEMO) {
         ids = images.map((item) => item.id);
       } else if (HOSTED) {
-        ids = hostedMatches(hostedCatalog, { query, tag, cluster, showSensitive }).map((item) => item.id);
+        ids = hostedMatches(hostedCatalog, { query, tags: selectedTags, cluster, showSensitive }).map((item) => item.id);
       } else {
         const params = new URLSearchParams();
         if (query) params.set('q', query);
-        if (tag) params.set('tag', tag);
+        if (selectedTags.length === 1) params.set('tag', selectedTags[0]);
+        if (selectedTags.length > 1) params.set('tags', selectedTags.join(','));
         if (cluster) params.set('cluster_id', cluster);
         const result = await get(`/api/images/ids${params.toString() ? `?${params}` : ''}`);
         ids = result.ids || [];
@@ -1065,9 +1115,13 @@ function App() {
     setSelectionMode(true);
     if (HOSTED && adding) setInspected(null);
   };
+  const toggleTag = (name) => {
+    setCluster(null);
+    setSelectedTags((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name]);
+  };
   const filterFromInspector = (name) => {
     setCluster(null);
-    setTag(name);
+    setSelectedTags((current) => current.includes(name) ? current : [...current, name]);
     setInspected(null);
   };
   const selectCluster = async (clusterId) => {
@@ -1086,7 +1140,7 @@ function App() {
       setSelectedIds((current) => new Set([...current, ...ids]));
       if (ids.length) setSelectionAnchorId(ids[ids.length - 1]);
       setQuery('');
-      setTag('');
+      setSelectedTags([]);
       setCluster(clusterId);
       setMode('images');
       setSelectionMode(true);
@@ -1415,7 +1469,7 @@ function App() {
     : imageTotal > images.length
       ? `${images.length.toLocaleString()} of ${imageTotal.toLocaleString()} images`
       : `${imageTotal.toLocaleString()} images`;
-  const resultScopeLabel = tag ? prettyTag(tag) : query || 'All images';
+  const resultScopeLabel = selectedTags.length ? selectedTags.map(prettyTag).join(' and ') : query || 'All pictures';
 
   return <>
     <header className="masthead">
@@ -1438,21 +1492,14 @@ function App() {
         <DeviceLibrary host={crosspointHost} setHost={setCrosspointHost} files={deviceFiles} books={deviceBooks} folders={deviceFolders} bookDirectory={bookDirectory} storage={deviceStorage} status={deviceStatus} loading={deviceLoading} uploading={bookUploading} uploadProgress={bookUploadProgress} error={deviceError} onRefresh={refreshDevice} onNavigateBooks={navigateBooks} onUploadBooks={uploadBooks} onMakeFolder={makeBookFolder} onRename={renameDeviceFile} onRenameBook={renameBook} onMoveBook={moveBook} onDelete={deleteDeviceFile} onDeleteBook={deleteBook} demo={PUBLIC_DEMO} />
         {notice && <section className="notice">{notice}</section>}
       </> : <>
-        <section className="control-room" aria-label="Catalog controls">
-          <label className="searchbox"><span>SEARCH</span><input type="search" aria-label="Search pictures" placeholder="Search pictures or tags" value={query} onChange={(event) => { setCluster(null); setQuery(event.target.value); }} /></label>
-          <div className="control-toolbar">
-            <button type="button" className="filter-toggle" onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">Filters <span>{tag ? prettyTag(tag) : 'All'}</span><b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button>
-            {SHOW_CLUSTERS && <div className="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" aria-selected={mode === 'images'} className={mode === 'images' ? 'active' : ''} onClick={() => setMode('images')}>Pictures</button><button type="button" role="tab" aria-selected={mode === 'clusters'} className={mode === 'clusters' ? 'active' : ''} onClick={() => setMode('clusters')}>Clusters</button></div>}
-            {HOSTED && <button type="button" className="content-toggle" aria-pressed={showSensitive} onClick={toggleSensitive}>{showSensitive ? 'Hide sensitive' : 'Show sensitive'}</button>}
-          </div>
-          {filtersOpen && <div className="filter-drawer" id="filter-drawer"><label className="tag-search"><span>TAG</span><input type="search" aria-label="Find a tag" placeholder="Find a tag" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} /></label><fieldset className="filter-row"><legend>TAG FAMILY</legend>{['','franchise','subject','style','content','intensity','display','model'].map((value) => <button type="button" key={value || 'all-families'} className={`filter ${tagCategory === value ? 'active' : ''}`} onClick={() => { setTagCategory(value); setTag(''); }}>{value || 'All'}</button>)}</fieldset><fieldset className="filter-row tag-filter-row"><legend>TAGS</legend><button type="button" className={`filter ${tag === '' ? 'active' : ''}`} onClick={() => { setCluster(null); setTag(''); setFiltersOpen(false); }}>{'All'}</button>{tags.slice(0, 80).map((item) => <button type="button" key={item.name} title={`${item.category} · ${item.automatic_count} images`} className={`filter ${tag === item.name ? 'active' : ''}`} onClick={() => { setCluster(null); setTag(item.name); setFiltersOpen(false); }}>{prettyTag(item.name)} <small>{item.automatic_count}</small></button>)}</fieldset></div>}
-        </section>
+        {SHOW_CLUSTERS && <div className="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" aria-selected={mode === 'images'} className={mode === 'images' ? 'active' : ''} onClick={() => setMode('images')}>Pictures</button><button type="button" role="tab" aria-selected={mode === 'clusters'} className={mode === 'clusters' ? 'active' : ''} onClick={() => setMode('clusters')}>Clusters</button></div>}
+        <FilterBar query={query} setQuery={setQuery} selectedTags={selectedTags} tags={tags} groups={HOSTED || PUBLIC_DEMO ? VISITOR_TAG_GROUPS : CURATOR_TAG_GROUPS} filtersOpen={filtersOpen} setFiltersOpen={setFiltersOpen} onToggleTag={toggleTag} onClearTags={() => setSelectedTags([])} onClearSearch={() => setQuery('')} tagSearch={tagSearch} setTagSearch={setTagSearch} tagGroup={tagGroup} setTagGroup={setTagGroup} showSensitive={showSensitive} onToggleSensitive={toggleSensitive} hosted={HOSTED} cluster={cluster} onClearCluster={() => setCluster(null)} />
         <div className="results-bar" role="status" aria-live="polite">
           <strong>{mode === 'images' ? imageResultLabel : `${clusters.length.toLocaleString()} clusters`}</strong>
           <span>{resultScopeLabel}</span>
           {mode === 'images' && <button type="button" className={`select-toggle ${selectionMode ? 'selection-active' : ''}`} onClick={toggleSelectionMode} aria-pressed={selectionMode} disabled={uploading || images.length === 0}>{selectionMode ? 'Done' : 'Select'}</button>}
         </div>
-        <SendDock host={crosspointHost} setHost={setCrosspointHost} destination={crosspointDestination} setDestination={setCrosspointDestination} destinationMode={crosspointDestinationMode} onSelectSleep={selectSleepDestination} onSelectCustom={selectCustomDestination} onDestinationBlur={normalizeDestinationField} selectedCount={selectedIds.size} visibleCount={images.length} visibleSelectedCount={visibleSelectedCount} imageTotal={imageTotal} selectionMode={selectionMode} onToggleSelectionMode={toggleSelectionMode} onClear={clearSelection} onUpload={uploadSelected} onDownload={downloadSelected} onSelectVisible={selectVisible} onSelectAllMatches={selectAllMatches} selectionLoading={selectionLoading} uploading={uploading} progress={uploadProgress} demo={PUBLIC_DEMO} liveDevice={LIVE_DEVICE} filtered={Boolean(query || tag || cluster)} />
+        <SendDock host={crosspointHost} setHost={setCrosspointHost} destination={crosspointDestination} setDestination={setCrosspointDestination} destinationMode={crosspointDestinationMode} onSelectSleep={selectSleepDestination} onSelectCustom={selectCustomDestination} onDestinationBlur={normalizeDestinationField} selectedCount={selectedIds.size} visibleCount={images.length} visibleSelectedCount={visibleSelectedCount} imageTotal={imageTotal} selectionMode={selectionMode} onToggleSelectionMode={toggleSelectionMode} onClear={clearSelection} onUpload={uploadSelected} onDownload={downloadSelected} onSelectVisible={selectVisible} onSelectAllMatches={selectAllMatches} selectionLoading={selectionLoading} uploading={uploading} progress={uploadProgress} demo={PUBLIC_DEMO} liveDevice={LIVE_DEVICE} filtered={Boolean(query || selectedTags.length || cluster)} />
         {notice && <section className="notice">{notice}</section>}
         {!SHOW_CLUSTERS || mode === 'images' ? <>
           <section ref={galleryRef} className={`gallery ${selectionMode ? 'selection-enabled' : ''}`} aria-label="Image results" aria-live="polite" aria-busy={imageLoading} onPointerDown={handleGalleryPointerDown} onKeyDown={handleGalleryKeyDown}>{images.length ? images.map((item) => <ImageCard key={item.id} item={item} onInspect={inspect} selected={selectedIds.has(item.id)} selectionMode={selectionMode} onSelect={selectImage} onKeyDown={handleImageKeyDown} consumeSuppressedClick={consumeSuppressedClick} showSensitive={showSensitive} visitor={HOSTED || PUBLIC_DEMO} />) : <div className="empty">{imageLoading ? 'Loading images…' : 'No images match these filters.'}</div>}</section>
