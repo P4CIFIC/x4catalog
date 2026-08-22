@@ -314,37 +314,60 @@ const savedCrossPointDestination = () => {
   }
 };
 
-const uploadBlobToCrossPoint = (host, destination, filename, blob, onProgress) => new Promise(async (resolve, reject) => {
-  const targetDestination = normalizeCrossPointDestination(destination);
+const CROSSPOINT_WS_CHUNK = 4 * 1024;
+const CROSSPOINT_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+
+const uploadBlobViaHttp = async (host, destination, filename, blob, onProgress) => {
+  const form = new FormData();
+  form.append('file', blob, filename);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), CROSSPOINT_UPLOAD_TIMEOUT_MS);
+  onProgress(0, blob.size);
+  try {
+    const response = await fetch(`${crossPointDeviceUrl(host, '/upload')}?${new URLSearchParams({ path: destination }).toString()}`, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal,
+      ...localNetworkFetchOptions(host),
+    });
+    await readCrossPointResponse(response);
+    onProgress(blob.size, blob.size);
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error(`Upload to the X4 timed out while sending ${filename}.`);
+    throw localNetworkError(host, error);
+  } finally {
+    window.clearTimeout(timer);
+  }
+};
+
+const uploadBlobViaWebSocket = (host, destination, filename, blob, onProgress) => new Promise((resolve, reject) => {
   const socket = new WebSocket(crossPointSocketUrl(host));
+  socket.binaryType = 'arraybuffer';
   let settled = false;
-  let offset = 0;
-  let data;
   const finish = (error) => {
     if (settled) return;
     settled = true;
     try { socket.close(); } catch (_) { /* already closed */ }
     if (error) reject(error); else resolve();
   };
-  const pump = () => {
-    if (settled || socket.readyState !== WebSocket.OPEN) return;
-    // CrossPoint's embedded WebSocket server is reliable with small binary
-    // frames; keep each client frame below its receive-buffer limit.
-    while (offset < data.length && socket.bufferedAmount < 1024 * 1024) {
-      const end = Math.min(offset + 8 * 1024, data.length);
-      socket.send(data.slice(offset, end));
-      offset = end;
-      onProgress(offset, data.length);
-    }
-    if (offset < data.length) window.setTimeout(pump, 10);
-  };
-  socket.onopen = () => socket.send(`START:${filename}:${blob.size}:${targetDestination}`);
+  socket.onopen = () => socket.send(`START:${filename}:${blob.size}:${destination}`);
   socket.onmessage = async (event) => {
     const message = typeof event.data === 'string' ? event.data.trim() : '';
     if (message === 'READY') {
       try {
-        data = new Uint8Array(await blob.arrayBuffer());
-        pump();
+        await new Promise((wait) => window.setTimeout(wait, 50));
+        let offset = 0;
+        while (offset < blob.size && socket.readyState === WebSocket.OPEN && !settled) {
+          while (socket.bufferedAmount > CROSSPOINT_WS_CHUNK * 2 && socket.readyState === WebSocket.OPEN && !settled) {
+            await new Promise((wait) => window.setTimeout(wait, 5));
+          }
+          if (settled) return;
+          if (socket.readyState !== WebSocket.OPEN) throw new Error('CrossPoint closed the upload connection.');
+          const end = Math.min(offset + CROSSPOINT_WS_CHUNK, blob.size);
+          socket.send(await blob.slice(offset, end).arrayBuffer());
+          offset = end;
+          onProgress(offset, blob.size);
+        }
       } catch (error) {
         finish(error);
       }
@@ -360,6 +383,34 @@ const uploadBlobToCrossPoint = (host, destination, filename, blob, onProgress) =
   socket.onerror = () => finish(new Error(`Could not connect to CrossPoint at ${host}.`));
   socket.onclose = () => { if (!settled) finish(new Error('CrossPoint closed the upload connection.')); };
 });
+
+const uploadBlobToCrossPoint = async (host, destination, filename, blob, onProgress) => {
+  // Callers pass an already-normalized folder. Do not run this through the
+  // sleep-screen helper: that rewrites `/` to `/.sleep`.
+  const httpUpload = () => uploadBlobViaHttp(host, destination, filename, blob, onProgress);
+  const wsUpload = () => uploadBlobViaWebSocket(host, destination, filename, blob, onProgress);
+  if (HTTPS_PAGE) {
+    try {
+      await httpUpload();
+    } catch (httpError) {
+      try {
+        await wsUpload();
+      } catch (_) {
+        throw httpError;
+      }
+    }
+    return;
+  }
+  try {
+    await wsUpload();
+  } catch (wsError) {
+    try {
+      await httpUpload();
+    } catch (_) {
+      throw wsError;
+    }
+  }
+};
 
 function ImageThumbnail({ item, large = false, censored = false }) {
   if (item.demo) return <div className={`demo-thumbnail ${large ? 'large' : ''} ${item.tone || 'paper'}`} role="img" aria-label={item.filename}><span>{item.mark || 'X4'}</span></div>;
@@ -536,7 +587,7 @@ function BookLibrary({ books, folders, directory, loading, uploading, uploadProg
       <div className="book-header-actions">
         <button className="device-refresh" onClick={onRefresh} disabled={demo || loading || uploading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
         <button className="book-primary" onClick={() => inputRef.current?.click()} disabled={demo || loading || uploading || !canUpload} title={!demo && !canUpload ? 'Connect the X4 first.' : undefined}>{demo ? 'Preview' : uploading ? 'Updating…' : 'Add books'} <span>↗</span></button>
-        <input ref={inputRef} className="visually-hidden" type="file" accept={BOOK_EXTENSIONS.join(',')} multiple onChange={handleFileChange} />
+        <input ref={inputRef} className="visually-hidden" type="file" accept={`${BOOK_EXTENSIONS.join(',')},application/epub+zip,text/plain`} multiple onChange={handleFileChange} />
       </div>
     </div>
     <div className="book-toolbar">
@@ -684,7 +735,7 @@ function HomePage({ imageCount }) {
 }
 
 function DeviceHowTo() {
-  return <p className="howto-line">On the X4, open <strong>File Transfer</strong>. Same Wi-Fi. Then send from <a href={HOSTED ? '/browse' : '/'}>Browse</a>. <a href="/docs">Guide</a></p>;
+  return <p className="howto-line">On the X4, open <strong>File Transfer</strong>. Same Wi-Fi. Pictures from <a href={HOSTED ? '/browse' : '/'}>Browse</a>. Books with Add books below. <a href="/docs">Guide</a></p>;
 }
 
 function DocsPage() {
@@ -715,7 +766,7 @@ function DocsPage() {
       <li>Use Chrome. Safari and Firefox may block it.</li>
       <li>Click Allow if the browser asks. If you clicked Block, refresh and try again.</li>
     </ul>
-    <p>Sleep screens go to the X4 sleep folder. You can also manage books on the Device page.</p>
+    <p>Sleep screens go to the X4 sleep folder. Books go on the <a href="/device">Device</a> page: <strong>Add books</strong>. EPUB, XTC, XTCH, or TXT.</p>
     <h2>CrossPoint help</h2>
     <p>File Transfer, Wi-Fi, and the rest of the X4 screens are documented by CrossPoint: <a href={CROSSPOINT_GUIDE_URL}>user guide</a> and <a href={CROSSPOINT_REPO_URL}>source</a>.</p>
     <h2>Want it to always work?</h2>
@@ -884,7 +935,7 @@ function App() {
         setDeviceStatus(status);
         setDeviceFiles(files);
         setDeviceStorage(storage);
-        return { status, files, storage };
+        return { status, files, storage, books: booksResult.books };
       }
       // The embedded webserver is single-client oriented; keep these requests
       // sequential so a directory refresh cannot race the status request.
@@ -903,7 +954,7 @@ function App() {
       setDeviceStatus(status);
       setDeviceFiles(files);
       setDeviceStorage(storage);
-      return { status, files, storage };
+      return { status, files, storage, books: booksResult.books };
     } catch (error) {
       setDeviceError(error.message);
       throw error;
@@ -1322,7 +1373,7 @@ function App() {
     try {
       const destination = normalizeBookDirectory(bookDirectory);
       const device = await loadDevice();
-      const existing = new Map(deviceBooks.map((book) => [book.name.toLowerCase(), book]));
+      const existing = new Map((device.books || []).map((book) => [book.name.toLowerCase(), book]));
       const replacements = candidates.filter((file) => existing.has(file.name.toLowerCase())).map((file) => file.name);
       if (replacements.length && !window.confirm(`Replace ${replacements.join(', ')} on the X4? Its EPUB cache will be refreshed.`)) return;
       const requiredBytes = candidates.reduce((sum, file) => sum + file.size + (64 * 1024), 0);
