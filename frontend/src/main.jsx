@@ -37,6 +37,8 @@ const supportsTargetAddressSpace = () => {
 };
 const IMAGE_PAGE_SIZE = 160;
 const GITHUB_URL = 'https://github.com/P4CIFIC/x4catalog';
+const CROSSPOINT_GUIDE_URL = 'https://crosspoint-cloud.idlerecord.com/en';
+const CROSSPOINT_REPO_URL = 'https://github.com/crosspoint-reader/crosspoint-reader';
 const GitHubMark = () => <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>;
 const isFinePointer = (event) => event.pointerType === 'mouse' || event.pointerType === 'pen' || !event.pointerType;
 const SENSITIVE_TAGS = new Set(['nsfw', 'nudity', 'partial-nudity', 'explicit-nudity', 'suggestive', 'sexualized', 'fetish', 'violence', 'gore', 'graphic-violence']);
@@ -649,7 +651,7 @@ function FilterBar({ query, setQuery, selectedTags, tags, groups, filtersOpen, s
     </div>}
     <div className="control-toolbar">
       <button type="button" className={`filter-toggle ${filtersOpen ? 'open' : ''}`} onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">{selectedTags.length ? `Filter · ${selectedTags.length}` : 'Filter'}<b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button>
-      {hosted && <button type="button" className="racy-toggle" aria-pressed={showSensitive} onClick={onToggleSensitive}>{showSensitive ? 'Racy pictures are on' : 'Show racy pictures'}</button>}
+      {hosted && <button type="button" className="nsfw-toggle" aria-pressed={showSensitive} onClick={onToggleSensitive}>{showSensitive ? 'NSFW is on' : 'Show NSFW'}</button>}
     </div>
     {filtersOpen && <div className="filter-picker" id="filter-drawer">
       <label className="tag-search"><span>FIND A FILTER</span><input type="search" aria-label="Find a filter" placeholder="batman, dark, manga…" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} /></label>
@@ -674,46 +676,48 @@ function HomePage({ imageCount }) {
       <a href={GITHUB_URL}>Source on GitHub</a>
     </div>
     <div className="product-grid">
-      <article><h2>Look</h2><p>{imageCount ? `${imageCount.toLocaleString()} images` : 'A public set of pictures'} sized for the X4. Racy tags stay hidden unless you turn them on.</p></article>
-      <article><h2>Send</h2><p>Your X4 and this computer must be on the same Wi-Fi. The pictures go straight to the device. They do not go through our servers.</p></article>
+      <article><h2>Look</h2><p>{imageCount ? `${imageCount.toLocaleString()} images` : 'A public set of pictures'} sized for the X4. NSFW stays hidden unless you turn it on.</p></article>
+      <article><h2>Send</h2><p>On the X4 home screen, open <strong>File Transfer</strong>. Same Wi-Fi as this computer. The pictures go straight to the device.</p></article>
       <article><h2>Your own library</h2><p>Want your own folder of BMPs, tags, and reviews? Run the same software on your computer. That never changes your original files.</p></article>
     </div>
   </article>;
 }
 
 function DeviceHowTo() {
-  return <p className="howto-line">Same Wi-Fi. Send pictures from <a href={HOSTED ? '/browse' : '/'}>Browse</a>. <a href="/docs">Guide</a></p>;
+  return <p className="howto-line">On the X4, open <strong>File Transfer</strong>. Same Wi-Fi. Then send from <a href={HOSTED ? '/browse' : '/'}>Browse</a>. <a href="/docs">Guide</a></p>;
 }
 
 function DocsPage() {
   return <article className="docs-page">
     <span className="product-kicker">Guide</span>
     <h1>Send pictures to your X4</h1>
-    <p className="lede">You do not need to install anything. The X4 only talks to devices on the same Wi-Fi. Pictures go from this site to the X4. They do not pass through our servers.</p>
+    <p className="lede">You do not need to install anything. On the X4, File Transfer is the CrossPoint screen that talks over Wi-Fi. Pictures go from this site to the X4. They do not pass through our servers.</p>
     <h2>What you need</h2>
     <ul>
-      <li>An XTEINK X4, turned on</li>
+      <li>An XTEINK X4 with CrossPoint, turned on</li>
       <li>This computer or phone on the <strong>same Wi-Fi</strong> as the X4</li>
       <li>Chrome, if you can. Safari often says no.</li>
     </ul>
     <h2>Do this</h2>
     <ol>
-      <li>On the X4, open the network / CrossPoint screen. You should see an address such as <code>crosspoint.local</code> or a set of numbers like <code>192.168.1.20</code>.</li>
+      <li>On the X4 <strong>home screen</strong>, open <strong>File Transfer</strong>. That is CrossPoint. You should see an address such as <code>crosspoint.local</code> or numbers like <code>192.168.1.20</code>.</li>
       <li>On this computer, open the <a href="/device">Device</a> page.</li>
-      <li>Type that address in <strong>X4 address</strong>. Start with <code>crosspoint.local</code>.</li>
+      <li>Type that address in <strong>X4 address</strong>.</li>
       <li>Click <strong>Refresh</strong>.</li>
       <li>If a popup asks to use a device on your local network, click <strong>Allow</strong>.</li>
       <li>When the page says <strong>Online</strong>, go to <a href={HOSTED ? '/browse' : '/'}>Browse</a>.</li>
-      <li>On Browse, tap <strong>Select</strong>, pick pictures, then <strong>Send to X4</strong>.</li>
+      <li>Tap <strong>Select</strong>, pick pictures, then <strong>Send to X4</strong>.</li>
     </ol>
     <h2>If it does not connect</h2>
     <ul>
       <li>Stay on the same Wi-Fi. Guest Wi-Fi and phone hotspots often block this.</li>
-      <li>Try the numbers from the X4 screen, not the name.</li>
+      <li>Try the numbers from File Transfer, not the name.</li>
       <li>Use Chrome. Safari and Firefox may block it.</li>
       <li>Click Allow if the browser asks. If you clicked Block, refresh and try again.</li>
     </ul>
     <p>Sleep screens go to the X4 sleep folder. You can also manage books on the Device page.</p>
+    <h2>CrossPoint help</h2>
+    <p>File Transfer, Wi-Fi, and the rest of the X4 screens are documented by CrossPoint: <a href={CROSSPOINT_GUIDE_URL}>user guide</a> and <a href={CROSSPOINT_REPO_URL}>source</a>.</p>
     <h2>Want it to always work?</h2>
     <p>Run X4 Catalog on your computer and open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>. That path does not need the browser popup. Install steps are in the <a href={`${GITHUB_URL}/blob/main/README.md`}>README</a>.</p>
     <p>Why the popup exists, firmware notes, and WebSocket limits: <a href={`${GITHUB_URL}/blob/main/docs/device.md`}>docs/device.md</a>.</p>

@@ -45,9 +45,13 @@ isolation also fail.
 content does not apply.
 
 1. Same LAN as the X4.
-2. Open <http://127.0.0.1:8765>.
-3. Enter `crosspoint.local` or the device IP.
-4. Send to `/.sleep`, or manage books on Device.
+2. On the X4 home screen, open **File Transfer** (CrossPoint).
+3. Open <http://127.0.0.1:8765>.
+4. Enter the address shown there (`crosspoint.local` or the device IP).
+5. Send to `/.sleep`, or manage books on Device.
+
+CrossPoint user guide: <https://crosspoint-cloud.idlerecord.com/en>
+Firmware source: <https://github.com/crosspoint-reader/crosspoint-reader>
 
 CrossPoint 1.5: browser → device (CORS). Older firmware: browser →
 loopback `/api/crosspoint/…` → device.
