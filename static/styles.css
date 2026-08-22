@@ -506,8 +506,16 @@ main { max-width: 96rem; margin: 0 auto; padding: clamp(1.25rem, 4vw, 4rem) clam
 .product-grid h2 { margin: 0 0 .4rem; font: 650 1.15rem/1.2 var(--font-display); }
 .product-grid p, .docs-page p, .docs-page li { margin: 0; color: var(--faint); font-size: .95rem; line-height: 1.55; }
 .docs-page h2 { margin: 2rem 0 .6rem; font: 650 1.35rem/1.2 var(--font-display); }
-.docs-page ol, .docs-page ul { margin: 0 0 1rem; padding-left: 1.2rem; }
-.docs-page code, .device-https-note code { font-size: .92em; }
+.docs-page ol, .docs-page ul, .howto ol { margin: 0 0 1rem; padding-left: 1.2rem; }
+.docs-page li + li, .howto li + li { margin-top: .45rem; }
+.docs-page code, .device-https-note code, .howto code { font-size: .92em; }
+.howto {
+  max-width: 40rem; margin: 0 0 1.4rem; padding: 1rem 1.15rem 1.05rem;
+  border: 1px solid var(--ink); background: var(--wash);
+}
+.howto h2 { margin: 0 0 .7rem; font: 650 1.2rem/1.2 var(--font-display); }
+.howto p { margin: 0; color: var(--faint); font-size: .9rem; line-height: 1.5; }
+.howto a { color: var(--ink); }
 .device-https-note, .https-note {
   margin: 0 0 1.2rem; padding: .85rem 1rem; border-left: .22rem solid var(--oxide);
   background: var(--wash); font-size: .9rem; line-height: 1.5;
