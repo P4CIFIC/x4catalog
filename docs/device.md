@@ -1,31 +1,65 @@
 # Connecting an X4
 
-The XTEINK X4 speaks HTTP and WebSocket through CrossPoint on your local network. Files never go through x4catalog.com to reach the device.
+Beginner steps live on the site: [x4catalog.com/docs](https://x4catalog.com/docs).
+This file is the technical note.
 
-## From x4catalog.com (Chrome)
+The XTEINK X4 speaks **HTTP** and **WebSocket** through CrossPoint on the
+local network. Files go from the browser (or the local catalog) to the
+device. They do not go through x4catalog.com.
 
-The public site is HTTPS. CrossPoint is HTTP (`http://crosspoint.local` and `ws://…:81`). Supporting browsers can ask for **local network access** and then talk to the device directly.
+## Why HTTPS is hard
 
-1. Put the X4 and this computer on the same LAN.
-2. Open [x4catalog.com/device](https://x4catalog.com/device) or send from Browse.
+x4catalog.com is HTTPS. CrossPoint is HTTP:
+
+- REST: `http://crosspoint.local` (or the device IPv4)
+- Uploads: `ws://crosspoint.local:81/` (or `ws://<ip>:81/`)
+
+A public HTTPS page loading those URLs is mixed content. Browsers block
+it unless they implement [Local Network Access](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/local_network_access)
+and the user grants permission.
+
+## What the hosted site does
+
+On HTTPS, device `fetch` calls set `targetAddressSpace` to `local` (LAN
+host / `.local` / RFC1918) or `loopback` (`127.0.0.1`). Chrome can then
+prompt: allow this site to use a device on your network.
+
+There is **no FastAPI proxy** on the hosted site. CrossPoint 1.5 CORS is
+required for the browser to talk to the device directly.
+
+Uploads still use the CrossPoint WebSocket. Granting LNA for `fetch` does
+not always unblock `ws://`. If status works and send fails, use the local
+catalog.
+
+Safari and Firefox often have no LNA prompt yet. Guest Wi-Fi and client
+isolation also fail.
+
+## Local catalog
+
+`uv run x4catalog serve` binds `127.0.0.1:8765` over HTTP, so mixed
+content does not apply.
+
+1. Same LAN as the X4.
+2. Open <http://127.0.0.1:8765>.
 3. Enter `crosspoint.local` or the device IP.
-4. Allow local network access if the browser prompts.
-5. If `.local` fails, use the IPv4 address from the CrossPoint screen.
+4. Send to `/.sleep`, or manage books on Device.
 
-This uses `fetch(..., { targetAddressSpace: 'local' })`. Safari and Firefox may still block it. Uploads also need the CrossPoint WebSocket; if that is blocked after HTTP works, use the local catalog.
-
-## Local catalog (always works)
-
-1. Put the X4 and your computer on the same LAN.
-2. Run `uv run x4catalog serve`.
-3. Open <http://127.0.0.1:8765>.
-4. Enter the CrossPoint address (`crosspoint.local` or the device IP).
-5. Select images and send them to `/.sleep`, or manage books on the Device page.
-
-CrossPoint 1.5 allows the browser to talk to the device directly (CORS). Older firmware falls back to the catalog's loopback proxy. The hosted site has no proxy.
+CrossPoint 1.5: browser → device (CORS). Older firmware: browser →
+loopback `/api/crosspoint/…` → device.
 
 ## Addresses
 
-- Default hostname: `crosspoint.local`
-- Sleep screens: `/.sleep`
-- Books: visible folders only (EPUB, XTC, XTCH, TXT)
+| What | Value |
+| --- | --- |
+| Default hostname | `crosspoint.local` (mDNS; often flaky) |
+| Sleep screens | `/.sleep` |
+| Books | Visible folders only (EPUB, XTC, XTCH, TXT) |
+| WebSocket | port `81`, `START:filename:size:destination` then binary frames |
+
+Prefer the IPv4 from the CrossPoint screen if `.local` does not resolve.
+
+## Security
+
+The public gallery only learns the host string the user typed. It never
+receives device files. Do not bind the local catalog off loopback. Do not
+relay CrossPoint through a cloud proxy.

@@ -4,7 +4,7 @@ Open-source catalog for [XTEINK X4](https://www.xteink.com/) sleep screens. 480Ã
 
 - **Software:** run it on your computer. Source files are never modified.
 - **Gallery:** browse a hosted snapshot at [x4catalog.com](https://www.x4catalog.com).
-- **Device:** send files to an X4 on your LAN from the local app. A public HTTPS page cannot talk to CrossPoint.
+- **Device:** send files to an X4 on the same Wi-Fi. Short guide: [x4catalog.com/docs](https://x4catalog.com/docs). Details: [docs/device.md](docs/device.md).
 
 ## Local catalog
 
@@ -28,7 +28,9 @@ Optional ML and OCR: `uv sync --extra ml`, then `download-models`, `ingest --ful
 
 The hosted site is a published snapshot (thumbnails + `catalog.json`). Reviews, labels, and OCR stay on the machine that runs the catalog until you publish again.
 
-Sensitive tags are hidden until a visitor turns them on. Live send to an X4 uses CrossPoint on your LAN. Chrome can ask for local network access from the HTTPS site; otherwise run the local HTTP app. See [docs/device.md](docs/device.md).
+Sensitive tags are hidden until a visitor turns them on. Sending to an X4 is
+explained in plain language at [x4catalog.com/docs](https://x4catalog.com/docs).
+The protocol, mixed content, and firmware notes are in [docs/device.md](docs/device.md).
 
 ## Publish a snapshot
 
