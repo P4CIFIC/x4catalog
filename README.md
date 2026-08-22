@@ -28,7 +28,7 @@ Optional ML and OCR: `uv sync --extra ml`, then `download-models`, `ingest --ful
 
 The hosted site is a published snapshot (thumbnails + `catalog.json`). Reviews, labels, and OCR stay on the machine that runs the catalog until you publish again.
 
-Sensitive tags are hidden until a visitor turns them on. Live send to an X4 works from the local HTTP app, not from the HTTPS gallery. See [docs/device.md](docs/device.md).
+Sensitive tags are hidden until a visitor turns them on. Live send to an X4 uses CrossPoint on your LAN. Chrome can ask for local network access from the HTTPS site; otherwise run the local HTTP app. See [docs/device.md](docs/device.md).
 
 ## Publish a snapshot
 
