@@ -24,8 +24,16 @@ const PAGE = PAGE_PATH === '/device' ? 'device'
   : PAGE_PATH === '/browse' ? 'browse'
   : (HOSTED ? 'home' : 'browse');
 const DEVICE_PAGE = PAGE === 'device';
-const LIVE_DEVICE = window.location.protocol === 'http:' && !HOSTED;
+const LIVE_DEVICE = !PUBLIC_DEMO && (HOSTED || window.location.protocol === 'http:');
 const READ_ONLY_ARCHIVE = PUBLIC_DEMO || HOSTED;
+const HTTPS_PAGE = window.location.protocol === 'https:';
+const supportsTargetAddressSpace = () => {
+  try {
+    return typeof Request !== 'undefined' && 'targetAddressSpace' in Request.prototype;
+  } catch (_) {
+    return false;
+  }
+};
 const IMAGE_PAGE_SIZE = 160;
 const GITHUB_URL = 'https://github.com/P4CIFIC/x4catalog';
 const SENSITIVE_TAGS = new Set(['nsfw', 'nudity', 'partial-nudity', 'explicit-nudity', 'suggestive', 'sexualized', 'fetish', 'violence', 'gore', 'graphic-violence']);
@@ -113,6 +121,33 @@ const readCrossPointResponse = async (response) => {
   return body;
 };
 
+const localNetworkAddressSpace = (host) => {
+  try {
+    const hostname = crossPointHostValue(host).split(':')[0].toLowerCase();
+    if (hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]' || hostname === '::1') return 'loopback';
+    return 'local';
+  } catch (_) {
+    return 'local';
+  }
+};
+
+const localNetworkFetchOptions = (host) => {
+  if (!HTTPS_PAGE || !supportsTargetAddressSpace()) return {};
+  return { targetAddressSpace: localNetworkAddressSpace(host) };
+};
+
+const localNetworkError = (host, error) => {
+  if (HTTPS_PAGE && !supportsTargetAddressSpace()) {
+    return new Error(`This browser cannot reach CrossPoint from HTTPS. Chrome can ask to use your local network. Open http://127.0.0.1:8765 if this one blocks it.`);
+  }
+  const transient = error?.name === 'AbortError' || String(error?.message || '').includes('Failed to fetch');
+  if (HTTPS_PAGE && transient) {
+    return new Error(`Could not reach CrossPoint at ${host}. Allow local network access if the browser asks, use the device IP if .local fails, or open http://127.0.0.1:8765.`);
+  }
+  if (error instanceof Error && error.message && !transient) return error;
+  return new Error(`Could not reach CrossPoint at ${host}.`);
+};
+
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 5000) => {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -146,18 +181,20 @@ const crossPointRequest = async (host, path, options = {}) => {
       // Let the proxy handle malformed action payloads and return its normal error.
     }
   }
+  const networkOptions = localNetworkFetchOptions(normalizedHost);
   try {
-    return await readCrossPointResponse(await fetchWithTimeout(`${crossPointDeviceUrl(normalizedHost, rawPath)}${directParams.toString() ? `?${directParams.toString()}` : ''}`, directOptions));
+    return await readCrossPointResponse(await fetchWithTimeout(`${crossPointDeviceUrl(normalizedHost, rawPath)}${directParams.toString() ? `?${directParams.toString()}` : ''}`, { ...directOptions, ...networkOptions }));
   } catch (directError) {
-    // A pre-1.5 device has the same endpoints but no CORS headers. Preserve
-    // the loopback proxy as a safe compatibility path for that case.
-    try {
-      return await readCrossPointResponse(await fetchWithTimeout(`/api/crosspoint${localPath}?${proxyParams.toString()}`, requestOptions));
-    } catch (_) {
-      const transient = directError?.name === 'AbortError' || directError?.message?.includes('Failed to fetch');
-      if (directError instanceof Error && directError.message && !transient) throw directError;
-      throw new Error(`Could not reach CrossPoint at ${normalizedHost}.`);
+    // Hosted HTTPS has no FastAPI proxy. A pre-1.5 device on localhost still
+    // falls back through the loopback catalog.
+    if (!HOSTED) {
+      try {
+        return await readCrossPointResponse(await fetchWithTimeout(`/api/crosspoint${localPath}?${proxyParams.toString()}`, requestOptions));
+      } catch (_) {
+        throw localNetworkError(normalizedHost, directError);
+      }
     }
+    throw localNetworkError(normalizedHost, directError);
   }
 };
 
@@ -349,9 +386,8 @@ function Inspector({ item, onClose, onReview, onQueue, queued, demo, liveDevice,
     <h2 id="inspector-title">{item.filename}</h2>
     <div className="inspector-actions">
       {['keep', 'favorite', 'reject'].map((decision) => <button key={decision} className={decision === 'keep' ? 'primary' : ''} onClick={() => onReview(item.id, decision)} disabled={demo}>{decision}</button>)}
-      {liveDevice
-        ? <button onClick={() => onQueue(item.id)} disabled={demo}>{queued ? 'Remove from send' : 'Add to send'}</button>
-        : (downloadUrl ? <a className="ghost-link" href={downloadUrl} download={item.filename}>Download</a> : <button disabled>No file to download</button>)}
+      {liveDevice && <button onClick={() => onQueue(item.id)} disabled={demo}>{queued ? 'Remove from send' : 'Add to send'}</button>}
+      {downloadUrl ? <a className="ghost-link" href={downloadUrl} download={item.filename}>Download</a> : (!liveDevice && <button disabled>No file to download</button>)}
     </div>
     <section className="inspector-section"><h3>Tags</h3><div className="tag-list">{tags.length ? tags.map((tag) => <span className={`tag ${tag.source === 'machine' ? 'automatic' : ''}`} key={`${tag.name}-${tag.source}`}>{prettyTag(tag.name)}{tag.source === 'machine' && Number.isFinite(Number(tag.confidence)) ? ` · ${Number(tag.confidence).toFixed(2)}` : ''}</span>) : <span className="tag">No tags</span>}</div></section>
     <details className="inspector-details"><summary>Image details</summary><div className="facts">
@@ -376,7 +412,7 @@ function CrossPointTransfer({ host, setHost, destination, setDestination, destin
   useEffect(() => { if (uploading) setExpanded(true); }, [uploading]);
   return <section className={`crosspoint-transfer ${selectedCount ? 'has-selection' : 'empty-selection'}`} aria-label={liveDevice ? 'Send images to CrossPoint' : 'Download selected images'}>
     <div className="transfer-compact">
-      <div className="transfer-step"><span className="step-number">3</span><div><span className="step-label">{liveDevice ? 'Send to X4' : 'Download'}</span><strong>{selectedCount ? `${selectedCount} selected` : 'Select images first'}</strong>{!liveDevice && <small className="transfer-blocked-note">HTTPS cannot reach an X4. Download here, or send from the local catalog.</small>}{storageUnavailable && <small className="transfer-blocked-note">Connect the X4 to verify storage</small>}</div>
+      <div className="transfer-step"><span className="step-number">3</span><div><span className="step-label">{liveDevice ? 'Send to X4' : 'Download'}</span><strong>{selectedCount ? `${selectedCount} selected` : 'Select images first'}</strong>{HTTPS_PAGE && liveDevice && <small className="transfer-blocked-note">Allow local network access if asked.</small>}{storageUnavailable && <small className="transfer-blocked-note">Connect the X4 to verify storage</small>}</div>
       </div>
       <div className="transfer-actions">
         <button className="transfer-primary" onClick={liveDevice ? onUpload : onDownload} disabled={demo || uploading || selectedCount === 0 || (liveDevice && (customDestinationMissing || storageUnavailable))} title={storageUnavailable ? 'Connect the X4 and refresh storage before sending.' : undefined}>{sendLabel}<span>↗</span></button>
@@ -560,7 +596,7 @@ function HomePage({ imageCount }) {
     <div className="product-grid">
       <article><h2>Local first</h2><p>The catalog binds to 127.0.0.1, never changes source BMPs, and keeps your library on your machine until you publish a snapshot on purpose.</p></article>
       <article><h2>Public gallery</h2><p>{imageCount ? `${imageCount.toLocaleString()} images` : 'A published snapshot'} prepared for the X4. Sensitive tags stay hidden unless you turn them on.</p></article>
-      <article><h2>Your device</h2><p>CrossPoint is HTTP on your LAN. This HTTPS site can download files. Live send happens from the local app. See the device notes.</p></article>
+      <article><h2>Your device</h2><p>Send sleep screens from this site if the browser allows local network access to CrossPoint. Chrome can prompt for that. Otherwise run the local catalog on HTTP.</p></article>
     </div>
   </article>;
 }
@@ -580,7 +616,7 @@ function DocsPage() {
     </ol>
     <p>Open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>. The server is loopback-only.</p>
     <h2>Talk to an X4</h2>
-    <p>Put the device and your computer on the same LAN. In the local app, enter <code>crosspoint.local</code> or the device IP, then send images to <code>/.sleep</code>. Browsers block that HTTP/WebSocket API from this HTTPS site. Download files here; send them from localhost. Details: the device page and the repository docs.</p>
+    <p>Put the device and your computer on the same LAN. Enter <code>crosspoint.local</code> or the device IP, then send images to <code>/.sleep</code>. On this HTTPS site, Chrome can ask to use your local network. If the browser refuses, run the catalog at <code>http://127.0.0.1:8765</code>.</p>
     <h2>Public snapshot</h2>
     <p>Maintainers publish thumbnails and <code>catalog.json</code> to DigitalOcean Spaces and serve this UI from App Platform. Cloud ingest, user uploads, and conversion are not part of the hosted site yet.</p>
     <p><a href="/device">Device page</a> · <a href={GITHUB_URL}>GitHub</a> · <a href={`${GITHUB_URL}/blob/main/README.md`}>README</a></p>
@@ -1339,12 +1375,12 @@ function App() {
     <main>
       {PUBLIC_DEMO && <section className="demo-banner" role="status"><strong>DEMO</strong><span>Sample data · read-only</span></section>}
       {PAGE === 'home' ? <HomePage imageCount={hostedCatalog?.image_count} /> : PAGE === 'docs' ? <DocsPage /> : DEVICE_PAGE ? <>
-        {!LIVE_DEVICE && !PUBLIC_DEMO && <section className="device-https-note" role="status">This HTTPS page cannot reach an X4. CrossPoint is HTTP on your LAN. Run the local catalog at <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a> to send files, or <a href="/docs">read the docs</a>.</section>}
-        <DeviceLibrary host={crosspointHost} setHost={setCrosspointHost} files={deviceFiles} books={deviceBooks} folders={deviceFolders} bookDirectory={bookDirectory} storage={deviceStorage} status={deviceStatus} loading={deviceLoading} uploading={bookUploading} uploadProgress={bookUploadProgress} error={deviceError} onRefresh={refreshDevice} onNavigateBooks={navigateBooks} onUploadBooks={uploadBooks} onMakeFolder={makeBookFolder} onRename={renameDeviceFile} onRenameBook={renameBook} onMoveBook={moveBook} onDelete={deleteDeviceFile} onDeleteBook={deleteBook} demo={PUBLIC_DEMO || !LIVE_DEVICE} />
+        {HTTPS_PAGE && LIVE_DEVICE && <section className="device-https-note" role="status">CrossPoint is HTTP on your LAN. Allow local network access if the browser asks. If it never asks or still fails, use the device IP or open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>.</section>}
+        <DeviceLibrary host={crosspointHost} setHost={setCrosspointHost} files={deviceFiles} books={deviceBooks} folders={deviceFolders} bookDirectory={bookDirectory} storage={deviceStorage} status={deviceStatus} loading={deviceLoading} uploading={bookUploading} uploadProgress={bookUploadProgress} error={deviceError} onRefresh={refreshDevice} onNavigateBooks={navigateBooks} onUploadBooks={uploadBooks} onMakeFolder={makeBookFolder} onRename={renameDeviceFile} onRenameBook={renameBook} onMoveBook={moveBook} onDelete={deleteDeviceFile} onDeleteBook={deleteBook} demo={PUBLIC_DEMO} />
         {notice && <section className="notice">{notice}</section>}
       </> : <>
         <section className="archive-intro"><div><span className="transfer-kicker"><i /> CATALOG</span><h1>Browse images</h1></div><ol className="workflow" aria-label="How to use the catalog"><li><b>1</b><span>Search</span></li><li><b>2</b><span>Select</span></li><li><b>3</b><span>{LIVE_DEVICE ? 'Send' : 'Download'}</span></li></ol></section>
-        {!LIVE_DEVICE && <section className="https-note">This public site is HTTPS, so it cannot talk to CrossPoint. Download images here. To send them to an X4, run the local catalog.</section>}
+        {HTTPS_PAGE && LIVE_DEVICE && <section className="https-note">Sending uses CrossPoint on your LAN. Allow local network access if asked. Download still works if the browser blocks the device.</section>}
         <section className="control-room" aria-label="Catalog controls">
           <label className="searchbox"><span>SEARCH</span><input type="search" aria-label="Search images" placeholder="Search images, tags, or OCR" value={query} onChange={(event) => { setCluster(null); setQuery(event.target.value); }} /></label>
           <div className="control-toolbar"><button type="button" className="filter-toggle" onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen} aria-controls="filter-drawer">Filters <span>{tag ? prettyTag(tag) : 'All images'}</span><b aria-hidden="true">{filtersOpen ? '−' : '+'}</b></button><div className="view-switch" role="tablist" aria-label="View"><button type="button" role="tab" aria-selected={mode === 'images'} className={mode === 'images' ? 'active' : ''} onClick={() => setMode('images')}>Images</button><button type="button" role="tab" aria-selected={mode === 'clusters'} className={mode === 'clusters' ? 'active' : ''} onClick={() => setMode('clusters')}>Clusters</button></div></div>
