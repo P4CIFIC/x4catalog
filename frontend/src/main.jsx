@@ -216,13 +216,17 @@ const numericField = (object, keys) => {
 
 const parseDeviceStorage = (status, storagePayload, listedBytes) => {
   const source = storagePayload?.storage || storagePayload || status?.storage || status?.sd || status || {};
-  const totalBytes = numericField(source, ['totalBytes', 'total', 'sdTotalBytes', 'capacityBytes', 'capacity']);
-  const usedBytes = numericField(source, ['usedBytes', 'used', 'sdUsedBytes']);
-  const freeBytes = numericField(source, ['freeBytes', 'free', 'availableBytes', 'available']);
+  // CrossPoint 1.5 /api/status reports freeHeap (RAM), not SD card capacity.
+  const totalBytes = numericField(source, ['totalBytes', 'total_bytes', 'sdTotalBytes', 'capacityBytes', 'capacity']);
+  const usedBytes = numericField(source, ['usedBytes', 'used_bytes', 'sdUsedBytes']);
+  const freeBytes = numericField(source, ['freeBytes', 'free_bytes', 'availableBytes', 'available', 'sdFreeBytes']);
+  const derivedUsed = totalBytes !== null && freeBytes !== null ? Math.max(totalBytes - freeBytes, 0) : null;
+  const derivedFree = totalBytes !== null && usedBytes !== null ? Math.max(totalBytes - usedBytes, 0) : null;
   return {
     totalBytes,
-    usedBytes: usedBytes ?? (totalBytes !== null && freeBytes !== null ? Math.max(totalBytes - freeBytes, 0) : listedBytes),
-    freeBytes: freeBytes ?? (totalBytes !== null && usedBytes !== null ? Math.max(totalBytes - usedBytes, 0) : null),
+    usedBytes: usedBytes ?? derivedUsed,
+    freeBytes: freeBytes ?? derivedFree,
+    listedBytes,
   };
 };
 
@@ -404,18 +408,17 @@ function Inspector({ item, onClose, onReview, onQueue, queued, demo, liveDevice,
 function CrossPointTransfer({ host, setHost, destination, setDestination, destinationMode, onSelectSleep, onSelectCustom, onDestinationBlur, selectedCount, visibleCount, selectionMode, onToggleSelectionMode, onClear, onUpload, onDownload, uploading, progress, capacityGuardKnown, demo, liveDevice }) {
   const [expanded, setExpanded] = useState(false);
   const customDestinationMissing = destinationMode === 'custom' && !destination.trim();
-  const storageUnavailable = liveDevice && !demo && selectedCount > 0 && !capacityGuardKnown;
   const sendLabel = !liveDevice
     ? (selectedCount ? `Download ${selectedCount}` : 'Select images')
-    : demo ? 'Preview' : uploading ? 'Sending…' : customDestinationMissing ? 'Choose a folder' : storageUnavailable ? 'Check X4 storage' : selectedCount ? `Send ${selectedCount} to X4` : 'Select images';
+    : demo ? 'Preview' : uploading ? 'Sending…' : customDestinationMissing ? 'Choose a folder' : selectedCount ? `Send ${selectedCount} to X4` : 'Select images';
   const selectLabel = selectionMode ? 'Done selecting' : selectedCount ? 'Add images' : 'Select images';
   useEffect(() => { if (uploading) setExpanded(true); }, [uploading]);
   return <section className={`crosspoint-transfer ${selectedCount ? 'has-selection' : 'empty-selection'}`} aria-label={liveDevice ? 'Send images to CrossPoint' : 'Download selected images'}>
     <div className="transfer-compact">
-      <div className="transfer-step"><span className="step-number">3</span><div><span className="step-label">{liveDevice ? 'Send to X4' : 'Download'}</span><strong>{selectedCount ? `${selectedCount} selected` : 'Select images first'}</strong>{HTTPS_PAGE && liveDevice && <small className="transfer-blocked-note">If asked, allow this site to use a device on your Wi-Fi.</small>}{storageUnavailable && <small className="transfer-blocked-note">Connect the X4 to verify storage</small>}</div>
+      <div className="transfer-step"><span className="step-number">3</span><div><span className="step-label">{liveDevice ? 'Send to X4' : 'Download'}</span><strong>{selectedCount ? `${selectedCount} selected` : 'Select images first'}</strong>{HTTPS_PAGE && liveDevice && <small className="transfer-blocked-note">If asked, allow this site to use a device on your Wi-Fi.</small>}</div>
       </div>
       <div className="transfer-actions">
-        <button className="transfer-primary" onClick={liveDevice ? onUpload : onDownload} disabled={demo || uploading || selectedCount === 0 || (liveDevice && (customDestinationMissing || storageUnavailable))} title={storageUnavailable ? 'Connect the X4 and refresh storage before sending.' : undefined}>{sendLabel}<span>↗</span></button>
+        <button className="transfer-primary" onClick={liveDevice ? onUpload : onDownload} disabled={demo || uploading || selectedCount === 0 || (liveDevice && customDestinationMissing)}>{sendLabel}<span>↗</span></button>
         <button className={selectionMode ? 'selection-active' : ''} onClick={onToggleSelectionMode} aria-pressed={selectionMode} disabled={uploading || visibleCount === 0}>{selectLabel}</button>
         <button onClick={onClear} disabled={uploading || selectedCount === 0}>Clear</button>
       </div>
@@ -504,7 +507,7 @@ function BookLibrary({ books, folders, directory, loading, uploading, uploadProg
       <div><span className="transfer-kicker"><i /> BOOKS</span><h2>Books</h2><span className="book-format-note">EPUB · XTC · XTCH · TXT</span></div>
       <div className="book-header-actions">
         <button className="device-refresh" onClick={onRefresh} disabled={demo || loading || uploading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
-        <button className="book-primary" onClick={() => inputRef.current?.click()} disabled={demo || loading || uploading || !canUpload} title={!demo && !canUpload ? 'Connect the X4 and verify storage before adding books.' : undefined}>{demo ? 'Preview' : uploading ? 'Updating…' : 'Add books'} <span>↗</span></button>
+        <button className="book-primary" onClick={() => inputRef.current?.click()} disabled={demo || loading || uploading || !canUpload} title={!demo && !canUpload ? 'Connect the X4 first.' : undefined}>{demo ? 'Preview' : uploading ? 'Updating…' : 'Add books'} <span>↗</span></button>
         <input ref={inputRef} className="visually-hidden" type="file" accept={BOOK_EXTENSIONS.join(',')} multiple onChange={handleFileChange} />
       </div>
     </div>
@@ -543,7 +546,7 @@ function DeviceLibrary({ host, setHost, files, books, folders, bookDirectory, st
   const firmware = status?.version || 'unknown';
   const apiMode = firmware === '1.5.0' ? 'CORS API' : 'loopback fallback';
   const connectionLabel = demo ? 'DEMO' : status ? 'ONLINE' : error ? 'OFFLINE' : 'CONNECTING…';
-  const canUploadBooks = !demo && Boolean(status) && storage.freeBytes !== null;
+  const canUploadBooks = !demo && Boolean(status);
   return <section className="device-library" aria-label="X4 device library">
     <div className="device-library-header">
       <div>
@@ -563,7 +566,7 @@ function DeviceLibrary({ host, setHost, files, books, folders, bookDirectory, st
     </div></details>
     <div className="device-storage">
       <div className="storage-heading"><span>STORAGE</span><strong>{storageKnown ? `${bytesLabel(storage.freeBytes)} free` : 'Unknown'}</strong></div>
-      {storageKnown ? <><div className="storage-track"><span style={{ width: `${usedPercent}%` }} /></div><div className="storage-meta"><span>{bytesLabel(storage.usedBytes)} used</span><span>{bytesLabel(storage.totalBytes)} total</span></div></> : capacityKnown ? <div className="storage-unknown">Free space is known. Total capacity is not.</div> : <div className="storage-unknown">Storage is unavailable. Uploads stay blocked until the X4 reports free space.</div>}
+      {storageKnown ? <><div className="storage-track"><span style={{ width: `${usedPercent}%` }} /></div><div className="storage-meta"><span>{bytesLabel(storage.usedBytes)} used</span><span>{bytesLabel(storage.totalBytes)} total</span></div></> : capacityKnown ? <div className="storage-unknown">{bytesLabel(storage.freeBytes)} free. The X4 did not report total size.</div> : status ? <div className="storage-unknown">This X4 does not report free space. You can still send pictures.</div> : <div className="storage-unknown">Connect the X4 to see storage.</div>}
       <div className="storage-meta"><span>{books.length} book{books.length === 1 ? '' : 's'} · {files.length} sleep screen{files.length === 1 ? '' : 's'}</span><span>{bytesLabel(listedBytes)} listed</span></div>
     </div>
     {error && <div className="device-error">{error} <button onClick={onRefresh}>Try again</button></div>}
@@ -1228,12 +1231,8 @@ function App() {
       const existing = new Map(deviceBooks.map((book) => [book.name.toLowerCase(), book]));
       const replacements = candidates.filter((file) => existing.has(file.name.toLowerCase())).map((file) => file.name);
       if (replacements.length && !window.confirm(`Replace ${replacements.join(', ')} on the X4? Its EPUB cache will be refreshed.`)) return;
-      if (device.storage.freeBytes === null) {
-        setNotice('Upload blocked: the X4 did not report free storage. Refresh the device and try again.');
-        return;
-      }
       const requiredBytes = candidates.reduce((sum, file) => sum + file.size + (64 * 1024), 0);
-      if (requiredBytes > device.storage.freeBytes) {
+      if (device.storage.freeBytes !== null && requiredBytes > device.storage.freeBytes) {
         setNotice(`Upload blocked: ${bytesLabel(requiredBytes)} required, but only ${bytesLabel(device.storage.freeBytes)} is free on the X4.`);
         return;
       }
@@ -1309,12 +1308,8 @@ function App() {
       const details = await Promise.all(ids.map((id) => HOSTED
         ? Promise.resolve((hostedCatalog?.images || []).find((item) => item.id === id) || Promise.reject(new Error(`Unknown image ${id}`)))
         : get(`/api/images/${id}`)));
-      if (device.storage.freeBytes === null) {
-        setNotice('Upload blocked: the X4 did not report free storage. Refresh the device and try again.');
-        return;
-      }
       const requiredBytes = details.reduce((sum, detail) => sum + (Number(detail.byte_size) || 0) + (64 * 1024), 0);
-      if (requiredBytes > device.storage.freeBytes) {
+      if (device.storage.freeBytes !== null && requiredBytes > device.storage.freeBytes) {
         setNotice(`Upload blocked: ${bytesLabel(requiredBytes)} required, but only ${bytesLabel(device.storage.freeBytes)} is free on the X4.`);
         return;
       }
