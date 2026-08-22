@@ -31,6 +31,11 @@ Uploads still use the CrossPoint WebSocket. Granting LNA for `fetch` does
 not always unblock `ws://`. If status works and send fails, use the local
 catalog.
 
+CrossPoint **1.5.0** `/api/status` returns version, IP, RSSI, `freeHeap`
+(RAM), uptime, device, and serial. It does **not** report SD free space.
+The UI must not block sends on that. Prefer the device IPv4;
+`crosspoint.local` is mDNS and often fails in `curl` and some browsers.
+
 Safari and Firefox often have no LNA prompt yet. Guest Wi-Fi and client
 isolation also fail.
 
