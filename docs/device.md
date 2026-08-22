@@ -28,12 +28,15 @@ prompt: allow this site to use a device on your network.
 There is **no FastAPI proxy** on the hosted site. CrossPoint 1.5 CORS is
 required for the browser to talk to the device directly.
 
-On HTTPS, uploads use CrossPoint's HTTP `POST /upload` first (same
-`targetAddressSpace` as status). That is the path that survives mixed
-content after the user clicks Allow. WebSocket `ws://…:81` is the fast
-path on the local HTTP catalog, with HTTP as fallback. CrossPoint's own
-file manager does the same. Use 4 KB WebSocket frames; a 1 MB send buffer
-overruns the ESP32 on books.
+Chrome Local Network Access unblocks both `fetch` and `ws://` to the X4
+after the user clicks Allow. The tab still shows **Not Secure** because
+those calls are mixed content (HTTPS page → HTTP device). The
+x4catalog.com certificate is valid.
+
+Uploads match CrossPoint's file manager: WebSocket first, then
+`POST /upload`. Use 4 KB WebSocket frames. HTTP upload on firmware 1.5
+returns `400 File already exists` instead of overwriting; delete and
+retry when that happens.
 
 CrossPoint **1.5.0** `/api/status` returns version, IP, RSSI, `freeHeap`
 (RAM), uptime, device, and serial. It does **not** report SD free space.
