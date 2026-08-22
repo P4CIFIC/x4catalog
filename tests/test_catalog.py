@@ -135,6 +135,8 @@ def test_automatic_labels_are_published_without_human_confirmation(tmp_path: Pat
     tagged = client.get("/api/images?tag=bold").json()
     assert len(tagged["items"]) == 1
     assert tagged["total"] == 1
+    stacked = client.get("/api/images?tags=bold").json()
+    assert stacked["total"] == 1
     assert client.get("/api/tags").json()["items"]
 
 
@@ -154,6 +156,16 @@ def test_search_matches_machine_tags_and_dynamic_tag_filtering(tmp_path: Path) -
     assert search["total"] == 1
     tag_items = client.get("/api/tags?q=rick").json()["items"]
     assert tag_items[0]["name"] == "rick-and-morty"
+    with transaction(paths.database) as conn:
+        bold_id = conn.execute("SELECT id FROM tags WHERE name='bold'").fetchone()[0]
+        conn.execute(
+            "INSERT INTO image_tags(image_id, tag_id, source, confidence, confirmed) VALUES (?, ?, 'machine', 0.8, 0)",
+            (image_id, bold_id),
+        )
+    both = client.get("/api/images?tags=rick-and-morty,bold").json()
+    assert both["total"] == 1
+    missing = client.get("/api/images?tags=rick-and-morty,pokemon").json()
+    assert missing["total"] == 0
     ids = client.get("/api/images/ids?q=Rick and Morty").json()
     assert ids["ids"] == [image_id]
     assert ids["total"] == 1

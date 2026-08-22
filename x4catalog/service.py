@@ -53,10 +53,26 @@ def _search_pattern(value: str) -> str:
     return "%" + "%".join(tokens or [value.casefold().strip()]) + "%"
 
 
+def _tag_names(tag: str | None, tags: str | None) -> list[str]:
+    names: list[str] = []
+    if tag and tag.strip():
+        names.append(tag.strip())
+    if tags:
+        names.extend(part.strip() for part in tags.split(",") if part.strip())
+    unique: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        if name not in seen:
+            seen.add(name)
+            unique.append(name)
+    return unique
+
+
 def _image_filter_parts(
     *,
     q: str | None = None,
     tag: str | None = None,
+    tags: str | None = None,
     decision: str | None = None,
     cluster_id: int | None = None,
 ) -> tuple[list[str], list[object], list[str]]:
@@ -78,11 +94,12 @@ def _image_filter_parts(
             )
         )""")
         params.extend([pattern] * 4)
-    if tag:
-        joins.append("JOIN image_tags it ON it.image_id=i.id")
-        joins.append("JOIN tags t ON t.id=it.tag_id")
-        clauses.append("t.name = ?")
-        params.append(tag)
+    for name in _tag_names(tag, tags):
+        clauses.append("""EXISTS (
+            SELECT 1 FROM image_tags it JOIN tags t ON t.id=it.tag_id
+            WHERE it.image_id=i.id AND t.name = ?
+        )""")
+        params.append(name)
     if decision:
         clauses.append("COALESCE(r.decision, 'unreviewed') = ?")
         params.append(decision)
@@ -241,12 +258,13 @@ def create_app(paths: CatalogPaths) -> FastAPI:
     def images(
         q: str | None = None,
         tag: str | None = None,
+        tags: str | None = None,
         decision: str | None = None,
         cluster_id: int | None = None,
         limit: int = Query(default=80, ge=1, le=240),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, object]:
-        clauses, params, joins = _image_filter_parts(q=q, tag=tag, decision=decision, cluster_id=cluster_id)
+        clauses, params, joins = _image_filter_parts(q=q, tag=tag, tags=tags, decision=decision, cluster_id=cluster_id)
         where = " AND ".join(clauses)
         query = f"""
             SELECT DISTINCT i.id, i.filename, i.mean_luma, i.contrast, i.edge_density,
@@ -270,11 +288,12 @@ def create_app(paths: CatalogPaths) -> FastAPI:
     def image_ids(
         q: str | None = None,
         tag: str | None = None,
+        tags: str | None = None,
         decision: str | None = None,
         cluster_id: int | None = None,
     ) -> dict[str, object]:
         """Return concrete IDs for a current result set without loading thumbnails."""
-        clauses, params, joins = _image_filter_parts(q=q, tag=tag, decision=decision, cluster_id=cluster_id)
+        clauses, params, joins = _image_filter_parts(q=q, tag=tag, tags=tags, decision=decision, cluster_id=cluster_id)
         where = " AND ".join(clauses)
         count_query = f"SELECT COUNT(DISTINCT i.id) AS total FROM images i {' '.join(joins)} WHERE {where}"
         query = f"""
