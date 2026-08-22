@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
+import hashlib
 import json
 import shutil
 
@@ -233,6 +234,8 @@ def publish(
     destination = paths.static / "catalog.json"
     destination.write_text(json.dumps(catalog, separators=(",", ":")) + "\n")
     catalog_url = _join_public(public_base, "/catalog.json") if public_base else "/catalog.json"
+    if public_base:
+        catalog_url = f"{catalog_url}?v={hashlib.sha256(destination.read_bytes()).hexdigest()[:12]}"
     (paths.static / "catalog-url.json").write_text(json.dumps({"url": catalog_url}) + "\n")
     return {
         "catalog": str(destination),

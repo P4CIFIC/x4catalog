@@ -207,6 +207,7 @@ main { padding: clamp(1.25rem, 4vw, 4rem) clamp(1.25rem, 6vw, 7rem) 4rem; }
 .sleep-panel-copy { max-width: 34rem; margin: .8rem 0 0; color: var(--faint); font-size: .65rem; line-height: 1.5; }
 
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.7rem, 1fr)); gap: clamp(.6rem, 1.5vw, 1.4rem); padding-top: clamp(1.3rem, 4vw, 3.5rem); }
+.gallery.selection-enabled { user-select: none; }
 .image-card { position: relative; margin: 0; border-top: 1px solid var(--ink); animation: arrive .38s both cubic-bezier(.22,1,.36,1); }
 .image-button { position: relative; display: block; width: 100%; padding: 0; border: 0; background: var(--wash); aspect-ratio: 3 / 5; overflow: hidden; }
 .image-card.selection-mode .image-button { cursor: crosshair; }
